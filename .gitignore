@@ -23,3 +23,7 @@ kernel/*test*.log
 
 # Nested repo clone used as scratch
 reaper-os/
+
+# Compiler dependency/output sidecars
+*.d
+*.out

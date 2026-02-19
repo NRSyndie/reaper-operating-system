@@ -1,3 +1,0 @@
-qemu-system-x86_64: warning: TCG doesn't support requested feature: CPUID.01H:ECX.pcid [bit 17]
-qemu-system-x86_64: warning: TCG doesn't support requested feature: CPUID.07H:EBX.invpcid [bit 10]
-qemu-system-x86_64: terminating on signal 15 from pid 41202 (timeout)
