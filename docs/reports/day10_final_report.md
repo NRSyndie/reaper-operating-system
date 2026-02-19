@@ -40,3 +40,28 @@ The "Process Substrate" has been established, enabling ReaperCore to manage mult
 
 ## 5. Conclusion
 Reaper-OS now supports multiple "Existences." The substrate is stable and ready for the final step of Epoch I: The transition to User-Mode.
+
+---
+
+## 6. Final-Product Closure Addendum (Thursday, February 19, 2026)
+
+Day 10 scheduler foundations were reworked for final-product alignment across vision, security, and performance constraints:
+
+- Per-CPU scheduler state table introduced (`SCHED_MAX_CPUS`) with CPU-indexed queue ownership scaffolding.
+- Scheduler state transitions centralized behind validated APIs (`scheduler_set_state`, `scheduler_block`, `scheduler_wake`).
+- Mode-aware runnable gating enforced at enqueue/wake/dispatch boundaries.
+- Bounded zombie reaping retained and lock-safe queue mutation invariants formalized.
+- Thread teardown hardening now scrubs stack and extended-state pages before free.
+- Context-switch volatile register lane is scrubbed before return.
+- Scheduler telemetry contract added and exported via `SYS_SCHED_METRICS`, with userspace probe coverage in Paradigm.
+
+### 6.1 Runtime Revalidation
+
+- `make -C kernel run`: PASS (no panic/regression markers).
+- `make -C kernel verify_matrix`: PASS (3/3 runs).
+- Required userspace markers confirmed, including `PARADIGM: Scheduler Metrics Probe PASS.` across matrix runs.
+
+### 6.2 Residual Scope
+
+- Full SMP dispatch with active multi-core runtime and IPI-driven remote preemption remains a follow-on activation step.
+- Full interrupt-frame-based user-context preservation model is partially hardened; current path scrubs volatile lanes but still uses legacy switch ABI shape.

@@ -52,6 +52,11 @@ uint8_t cpu_get_fpu_mode(void) {
     return fpu_mode;
 }
 
+uint32_t cpu_get_id(void) {
+    /* SMP scaffolding: BSP only for now. */
+    return 0;
+}
+
 void cpu_init_extended_state(void) {
     struct cpuid_result res;
     

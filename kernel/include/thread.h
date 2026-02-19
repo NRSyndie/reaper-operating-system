@@ -36,6 +36,8 @@ typedef struct thread {
     
     uint32_t tid;              /* Thread ID */
     uint32_t ticks_remaining;  /* Current quantum */
+    uint32_t last_cpu;         /* Last CPU that executed this thread */
+    uint8_t sched_class;       /* scheduler class (sched_class_t) */
     
     struct thread* next;       /* Intrusive list pointer for scheduler */
     struct thread* wait_next;  /* Intrusive list pointer for IPC wait queues */

@@ -8,6 +8,7 @@
 #define MAP_FLAGS_USER_RW  (MAP_FLAG_P | MAP_FLAG_W | MAP_FLAG_U)
 static struct mode_transition fate_history_buf[16] __attribute__((aligned(8)));
 static struct mode_transition fate_fault_buf[16] __attribute__((aligned(8)));
+static gate_sched_metrics_t sched_metrics_buf __attribute__((aligned(8)));
 
 int main(int argc, char** argv) {
     (void)argc; (void)argv;
@@ -84,6 +85,19 @@ int main(int argc, char** argv) {
         sys_log("PARADIGM: Boundary probes passed (safe failures confirmed).");
     } else {
         sys_log("PARADIGM: Boundary probes FAILED.");
+    }
+
+    if (sys_sched_metrics(&sched_metrics_buf) == 0) {
+        if (sched_metrics_buf.schedule_count > 0 &&
+            sched_metrics_buf.denied_enqueue == 0 &&
+            sched_metrics_buf.denied_wake == 0 &&
+            sched_metrics_buf.denied_dispatch == 0) {
+            sys_log("PARADIGM: Scheduler Metrics Probe PASS.");
+        } else {
+            sys_log("PARADIGM: Scheduler Metrics Probe WARN.");
+        }
+    } else {
+        sys_log("PARADIGM: Scheduler Metrics Probe FAILED.");
     }
 
     /* TEST: SHADOW MAPPING (LAW 2) - THE ARCHITECT'S PATH */

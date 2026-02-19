@@ -32,6 +32,7 @@ int sys_cap_mint(uint32_t src, uint32_t dst, uint16_t rights, uint32_t badge, ui
 int sys_fate_read(void* buffer, int count, uint32_t audit_cap);
 int sys_fate_read_ex(void* buffer, int count, uint32_t audit_cap, uint32_t read_mode);
 int sys_audit(uint64_t target_pid, uint64_t flags, void* out_buf, uint64_t count);
+int sys_sched_metrics(gate_sched_metrics_t* out_metrics);
 
 /* String utils (implemented in string.c or similar) */
 void* memset(void* dest, int c, unsigned long n);

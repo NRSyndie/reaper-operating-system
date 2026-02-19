@@ -32,6 +32,20 @@
 #define GATE_OP_OCULAR_SET      19
 #define GATE_OP_LATTICE_DETACH  20
 #define GATE_OP_AUDIT           21
+#define GATE_OP_SCHED_METRICS   22
+
+typedef struct {
+    uint64_t schedule_count;
+    uint64_t switch_count;
+    uint64_t remote_enqueue;
+    uint64_t migrations;
+    uint64_t denied_enqueue;
+    uint64_t denied_wake;
+    uint64_t denied_dispatch;
+    uint32_t cpu_id;
+    uint32_t ready_depth;
+    uint32_t zombie_depth;
+} gate_sched_metrics_t;
 
 typedef struct {
     uint64_t args[6];

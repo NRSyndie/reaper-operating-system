@@ -11,7 +11,8 @@ typedef enum {
     MODE_CASUAL   = 1,
     MODE_SECURE   = 2,
     MODE_LOCKDOWN = 3,
-    MODE_GHOST    = 4
+    MODE_GHOST    = 4,
+    MODE_KERNEL   = 5
 } mode_id_t;
 
 typedef enum {

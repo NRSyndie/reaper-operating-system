@@ -95,8 +95,7 @@ int lattice_attune(lattice_t* lattice, uint32_t new_crystal_index) {
         thread_t* next = curr->wait_next;
         
         // We wake everyone and let them re-fault if needed.
-        curr->state = THREAD_READY;
-        scheduler_add(curr);
+        scheduler_wake(curr);
         
         curr = next;
     }
@@ -147,7 +146,7 @@ bool lattice_handle_fault(uint64_t vaddr, uint64_t error_code) {
             // Future Page Access! Block the soul.
             uint64_t flags = spinlock_irqsave(&lattice->lock);
             
-            curr_thread->state = THREAD_BLOCKED;
+            scheduler_block(curr_thread);
             curr_thread->wait_next = NULL;
             if (!lattice->wait_head) {
                 lattice->wait_head = curr_thread;

@@ -147,6 +147,29 @@ Security rationale:
 - Prevents accidental permissive behavior while cross-process authority semantics are still under design.
 - Keeps ABI stable so user/kernel integration work can proceed without reopening syscall numbering.
 
+## `SYS_SCHED_METRICS` (21)
+
+ABI:
+
+- `a0`: user destination buffer (`gate_sched_metrics_t*`).
+- `a1`: user destination buffer size (must be `>= sizeof(gate_sched_metrics_t)`).
+
+Required invariants:
+
+- Destination buffer must be writable user memory for the full metrics structure.
+- Buffer size below struct size must fail with `-1`.
+- Call is read-only and must not mutate scheduler state beyond lock-safe metric reads.
+
+Record semantics:
+
+- `schedule_count`: scheduler invocations on the current CPU queue.
+- `switch_count`: successful context switches where `old != next`.
+- `remote_enqueue`: enqueue/wake calls targeting a non-local CPU queue.
+- `migrations`: observed handoffs where previous and next thread `last_cpu` differ.
+- `denied_enqueue`, `denied_wake`, `denied_dispatch`: mode-policy denials at scheduler boundaries.
+- `cpu_id`: current logical CPU id.
+- `ready_depth`, `zombie_depth`: queue depths at snapshot time.
+
 ## Observability Counters
 
 The kernel tracks counters for:

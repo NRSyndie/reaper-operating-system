@@ -117,3 +117,8 @@ int sys_fate_read_ex(void* buffer, int count, uint32_t audit_cap, uint32_t read_
 int sys_audit(uint64_t target_pid, uint64_t flags, void* out_buf, uint64_t count) {
     return do_gate_call(GATE_OP_AUDIT, target_pid, flags, (uint64_t)out_buf, count, 0);
 }
+
+int sys_sched_metrics(gate_sched_metrics_t* out_metrics) {
+    if (!out_metrics) return -1;
+    return do_gate_call(GATE_OP_SCHED_METRICS, (uint64_t)out_metrics, sizeof(*out_metrics), 0, 0, 0);
+}

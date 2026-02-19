@@ -104,6 +104,9 @@ void cpu_init_extended_state(void);
 
 uint8_t cpu_get_fpu_mode(void);
 
+/* Current CPU logical ID (SMP scaffolding). */
+uint32_t cpu_get_id(void);
+
 /* INVPCID Descriptor */
 struct invpcid_desc {
     uint64_t pcid : 12;

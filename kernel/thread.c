@@ -51,6 +51,8 @@ thread_t* thread_create(process_t* owner, void (*entry)(void)) {
     t->state = THREAD_READY;
     t->owner = owner;
     t->ticks_remaining = DEFAULT_QUANTUM;
+    t->last_cpu = 0;
+    t->sched_class = SCHED_CLASS_NORMAL;
 
     owner->thread_count++;
 
@@ -81,12 +83,15 @@ void thread_destroy(thread_t* thread) {
     
     /* Free kernel stack */
     if (thread->kernel_stack_top) {
-        uint64_t stack_phys = pmm_virt_to_phys((void*)(thread->kernel_stack_top - 4096));
+        void* stack_base = (void*)(thread->kernel_stack_top - 4096);
+        uint64_t stack_phys = pmm_virt_to_phys(stack_base);
+        hyper_scrub(stack_base, 4096);
         pmm_free(stack_phys);
     }
 
     /* Free extended state buffer */
     if (thread->extended_state) {
+        hyper_scrub(thread->extended_state, 4096);
         uint64_t ext_phys = pmm_virt_to_phys(thread->extended_state);
         pmm_free(ext_phys);
     }
@@ -121,8 +126,7 @@ void thread_exit(void) {
         thread_t* waiter = owner->waiter_thread;
         owner->waiter_thread = NULL;
         if (waiter->state == THREAD_BLOCKED) {
-            waiter->state = THREAD_READY;
-            scheduler_add(waiter);
+            scheduler_wake(waiter);
         }
     }
 

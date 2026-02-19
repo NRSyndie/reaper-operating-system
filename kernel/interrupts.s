@@ -293,8 +293,20 @@ context_switch:
     popq %r12
     popq %rbp
     popq %rbx
+
+    # 6. Zero-Residue for volatile GPR lane between thread handoffs.
+    # Callee-saved registers above were restored from the next thread context.
+    xorq %rax, %rax
+    xorq %rcx, %rcx
+    xorq %rdx, %rdx
+    xorq %rsi, %rsi
+    xorq %rdi, %rdi
+    xorq %r8, %r8
+    xorq %r9, %r9
+    xorq %r10, %r10
+    xorq %r11, %r11
     
-    # 6. Return
+    # 7. Return
     ret
 
 /*
@@ -424,4 +436,3 @@ isr_spurious_47:
     iretq
 
 .section .note.GNU-stack,"",@progbits
-

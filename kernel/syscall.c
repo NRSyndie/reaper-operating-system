@@ -68,7 +68,8 @@ enum {
     SYS_ATTUNE = 17,
     SYS_OCULAR_SET = 18,
     SYS_LATTICE_DETACH = 19,
-    SYS_AUDIT = 20
+    SYS_AUDIT = 20,
+    SYS_SCHED_METRICS = 21
 };
 
 static int gate_op_to_legacy_sys(uint64_t op) {
@@ -94,6 +95,7 @@ static int gate_op_to_legacy_sys(uint64_t op) {
         case GATE_OP_OCULAR_SET: return SYS_OCULAR_SET;
         case GATE_OP_LATTICE_DETACH: return SYS_LATTICE_DETACH;
         case GATE_OP_AUDIT: return SYS_AUDIT;
+        case GATE_OP_SCHED_METRICS: return SYS_SCHED_METRICS;
         default: return -1;
     }
 }
@@ -468,15 +470,14 @@ static uint64_t ipc_invoke_endpoint(cap_identity_t* ident, uint64_t a0, uint64_t
         receiver->ipc_payload[3] = ident->badge;
 
         /* Wake Receiver */
-        receiver->state = THREAD_READY;
-        scheduler_add(receiver);
+        scheduler_wake(receiver);
 
         return 0; /* Success */
     }
 
     /* 2. No receiver waiting: Block the sender (Synchronous IPC) */
     
-    caller->state = THREAD_BLOCKED;
+    scheduler_block(caller);
     caller->ipc_payload[0] = a0;
     caller->ipc_payload[1] = a1;
     caller->ipc_payload[2] = a2;
@@ -686,7 +687,7 @@ uint64_t syscall_dispatcher(uint64_t num, uint64_t a0, uint64_t a1, uint64_t a2,
             }
 
             owner->waiter_thread = current;
-            current->state = THREAD_BLOCKED;
+            scheduler_block(current);
             schedule();
 
             /* Wake path: consume one event if present. */
@@ -990,6 +991,40 @@ uint64_t syscall_dispatcher(uint64_t num, uint64_t a0, uint64_t a1, uint64_t a2,
             }
             g_sys_metrics.perm_rejects++;
             ret = (uint64_t)-1;
+            break;
+        }
+
+        case SYS_SCHED_METRICS: {
+            gate_sched_metrics_t user_metrics;
+            sched_metrics_t kernel_metrics;
+            void* user_buf = (void*)a0;
+            uint64_t user_buf_size = a1;
+
+            if (!user_buf || user_buf_size < sizeof(gate_sched_metrics_t)) {
+                g_sys_metrics.invalid_rejects++;
+                ret = (uint64_t)-1;
+                break;
+            }
+
+            if (!validate_user_range_write((uint64_t)user_buf, sizeof(gate_sched_metrics_t))) {
+                ret = (uint64_t)-1;
+                break;
+            }
+
+            scheduler_get_metrics(&kernel_metrics);
+            fast_zero(&user_metrics, sizeof(user_metrics));
+            user_metrics.schedule_count = kernel_metrics.schedule_count;
+            user_metrics.switch_count = kernel_metrics.switch_count;
+            user_metrics.remote_enqueue = kernel_metrics.remote_enqueue;
+            user_metrics.migrations = kernel_metrics.migrations;
+            user_metrics.denied_enqueue = kernel_metrics.denied_enqueue;
+            user_metrics.denied_wake = kernel_metrics.denied_wake;
+            user_metrics.denied_dispatch = kernel_metrics.denied_dispatch;
+            user_metrics.cpu_id = kernel_metrics.cpu_id;
+            user_metrics.ready_depth = kernel_metrics.ready_depth;
+            user_metrics.zombie_depth = kernel_metrics.zombie_depth;
+
+            ret = copy_to_user(user_buf, &user_metrics, sizeof(user_metrics)) ? 0 : (uint64_t)-1;
             break;
         }
             

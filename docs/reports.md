@@ -138,6 +138,8 @@
 
     *   [PASS] Inter-process switching: Verified "Reality Shifts" between Process X and Process Y with PCID persistence.
 
+    *   [PASS] Final-product closure addendum (2026-02-19): Per-CPU scheduler scaffolding, mode-aware scheduling gates, scrubbed teardown, and `SYS_SCHED_METRICS` user probe validated in 3/3 runtime matrix runs.
+
 
 
 ### Epoch I, Day 11: The Genesis Handshake (User Mode Leap)

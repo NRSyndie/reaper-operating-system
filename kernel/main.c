@@ -482,7 +482,7 @@ static void test_integration(void) {
     thread_t* t_omega = thread_create(p_omega, (void*)0x400000);
     
     // Manually block Omega on the endpoint
-    t_omega->state = THREAD_BLOCKED;
+    scheduler_block(t_omega);
     ep->wait_head = t_omega;
     ep->wait_tail = t_omega;
     t_omega->wait_next = NULL;
