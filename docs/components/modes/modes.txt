@@ -1,0 +1,1414 @@
+Now that you have the full picture of the OS basics, let me tell you about the modes I had planned:
+
+
+# Reaper-OS Security Mode: LOCKDOWN
+# Description: Maximum emergency protection - system survival mode
+# Philosophy: Nothing in, nothing out, trust nothing - suffocate the threat
+# Trigger: Critical breach detected
+
+mode_name: lockdown
+mode_id: 3
+philosophy: "Remove the oxygen - suffocate intruders"
+default: false
+auto_activated: true
+emergency_mode: true
+
+# ============================================================================
+# NETWORK POLICY
+# ============================================================================
+network:
+  enabled: false  # COMPLETE NETWORK BLACKOUT
+  
+  physical:
+    disable_interfaces: all
+    disable_wifi: true
+    disable_ethernet: true
+    disable_bluetooth: true
+    disable_cellular: true
+    
+  kernel_level:
+    drop_all_packets: true
+    disable_ip_stack: true
+    block_layers: [physical, datalink, network, transport, application]
+    
+  kill_connections:
+    existing: true
+    timeout_seconds: 0  # Immediate
+    
+  dns:
+    freeze_cache: true
+    block_queries: true
+    
+  arp:
+    static_only: true
+    block_new_entries: true
+
+# ============================================================================
+# FILESYSTEM POLICY
+# ============================================================================
+filesystem:
+  read_only_paths:
+    - /              # ENTIRE ROOT FILESYSTEM
+    - /boot
+    - /usr
+    - /bin
+    - /sbin
+    - /lib
+    - /lib64
+    - /etc
+    - /var/lib/reaper
+    
+  executable_verification:
+    required: true
+    require_signature: true
+    require_origin: true
+    require_checksum: true
+    require_package_manager: true
+    minimum_age_minutes: 60  # Must be installed >1hr ago
+    
+  writable_locations:
+    - /var/log  # Only logs can be written
+    
+  mount_policy:
+    allow_new_mounts: false
+    unmount_removable: true  # Eject all USB
+    force_readonly: true
+    block_new_mounts: true
+    
+  file_monitoring:
+    critical_files: all
+    alert_on_any_modification: true
+    log_all_access: true
+    block_all_modifications: true
+    
+  suspicious_files:
+    action: delete_immediately
+    no_quarantine: true  # Too risky to keep
+    
+  tmp_restrictions:
+    no_write: true
+    no_execute: true
+    wipe_on_enter: true  # Clear /tmp when entering Lockdown
+
+# ============================================================================
+# PROCESS POLICY
+# ============================================================================
+process:
+  execution_restrictions:
+    allow_unverified: false
+    verified_only: true
+    
+  kill_immediately:
+    - unverified_binaries
+    - network_attempting_processes
+    - privilege_escalating_processes
+    - debugger_attached_processes
+    - code_injecting_processes
+    
+  whitelist:
+    mode: strict
+    allowed:
+      - core_daemons
+      - init_system
+      - terminal  # Minimal user interface
+      
+  max_total_processes: 50  # Very restrictive
+  
+  resource_limits:
+    enabled: true
+    max_cpu_percent: 25
+    max_memory_mb: 1024
+    max_processes_per_user: 10
+    max_threads: 10
+    max_children: 2
+    
+  process_isolation:
+    enabled: true
+    trust_level: zero
+    
+  ipc_restrictions:
+    daemon_only: true
+    block_shared_memory: true
+    block_unix_sockets: true  # Except Aegis
+    block_pipes: true
+    
+  debuggers:
+    allowed: false
+    kill_on_detection: true
+    
+  ptrace:
+    allowed: false
+
+# ============================================================================
+# HARDWARE POLICY
+# ============================================================================
+hardware:
+  usb:
+    kill_all_devices: true
+    block_new_devices: true
+    allowed_devices: []  # NOTHING
+    block_storage: true
+    block_networking: true
+    block_hid: true
+    
+  ports:
+    disable_physical: true
+    disable_drivers: true
+    blocked_ports: [usb, thunderbolt, ethernet, hdmi, sdcard]
+    
+  peripherals:
+    webcam:
+      enabled: false
+      
+    microphone:
+      enabled: false
+      
+    bluetooth:
+      enabled: false
+      
+    wifi:
+      enabled: false
+      
+    gps:
+      enabled: false
+      
+    fingerprint:
+      enabled: false
+      
+  dma:
+    block_all: true  # Prevent DMA attacks
+    
+  firmware_updates:
+    blocked: true
+
+# ============================================================================
+# PRIVILEGE POLICY
+# ============================================================================
+privileges:
+  sudo:
+    enabled: false  # COMPLETELY DISABLED
+    
+  root_access:
+    allowed: false  # NO ROOT ACCESS
+    
+  setuid_binaries:
+    blocked: true
+    
+  capabilities:
+    blocked: true
+    
+  polkit:
+    block_all: true
+    
+  privilege_escalation_commands:
+    disabled: [sudo, su, doas, pkexec]
+    
+  paradigm:
+    restrictions:
+      only_mode_change: true
+      require_physical_auth: true  # YubiKey required
+      exit_delay_seconds: 30
+
+# ============================================================================
+# MONITORING POLICY
+# ============================================================================
+monitoring:
+  logging_level: maximum
+  
+  log_categories:
+    authentication: true
+    network_attempts: true
+    file_activity: true  # PRIMARY FOCUS
+    process_creation: true
+    syscalls: true
+    privilege_attempts: true
+    hardware_changes: true
+    memory_modifications: true
+    
+  retention:
+    days: infinite  # Never delete
+    compress_after_days: 1
+    
+  alerting:
+    immediate_alerts:
+      - any_activity  # Alert on EVERYTHING
+      
+  snapshots:
+    enabled: true
+    interval_seconds: 30  # Every 30 seconds
+    keep_all: true
+    
+  screen_recording:
+    enabled: true  # For forensics
+    
+  keystroke_logging:
+    enabled: true  # Controversial but useful
+
+# ============================================================================
+# CRYPTOGRAPHY POLICY
+# ============================================================================
+crypto:
+  enforce_encryption:
+    all_new_files: true
+    
+  vault:
+    locked: false  # Keep accessible for emergency
+    timeout_minutes: 5
+    
+  clipboard:
+    disabled: true  # Prevent data exfiltration
+    
+  swap_encryption:
+    required: true
+    clear_on_enter: true  # Wipe swap on Lockdown entry
+    
+  memory:
+    clear_sensitive: true
+
+# ============================================================================
+# AUTOMATIC DE-ESCALATION
+# ============================================================================
+de_escalation:
+  automatic:
+    enabled: true
+    
+    conditions:
+      - threat_eliminated: true
+      - system_integrity_verified: true
+      - no_suspicious_activity_minutes: 30
+      
+    target_mode: secure  # Go to Secure, not Casual
+    
+  manual_override:
+    allowed: true
+    requirements:
+      - physical_authentication
+      - master_password
+      - acknowledge_risks
+      - countdown_seconds: 30
+      
+  failed_auto_recovery:
+    action: controlled_reboot
+    save_forensics: true
+    boot_into: recovery_mode
+
+# ============================================================================
+# USER EXPERIENCE
+# ============================================================================
+ui:
+  visual_indicator:
+    border_color: red
+    icon: 🔴
+    overlay: red_tint
+    full_screen_warning: true
+    
+  notifications:
+    priority: critical
+    sound: true
+    force_attention: true
+    
+  restrictions_notice:
+    show_on_mode_enter: true
+    message: |
+      🚨 LOCKDOWN MODE ACTIVE
+      
+      CRITICAL SECURITY EVENT DETECTED
+      Reason: {trigger_reason}
+      
+      SYSTEM RESTRICTIONS:
+      ⛔ Network: DISABLED
+      ⛔ USB: BLOCKED
+      ⛔ Root: DENIED
+      ✅ Execution: VERIFIED ONLY
+      
+      The system is attempting to contain the threat.
+      All activity is being logged for forensic analysis.
+      
+      Exit requires:
+      • Physical authentication (YubiKey)
+      • Master password
+      • 30 second countdown
+      
+      DO NOT EXIT unless threat is understood.
+
+# ============================================================================
+# THREAT RESPONSE
+# ============================================================================
+threat_response:
+  immediate_actions:
+    - kill_all_network_connections
+    - disconnect_usb_devices
+    - kill_suspicious_processes
+    - make_filesystem_readonly
+    - disable_privilege_escalation
+    - enable_maximum_logging
+    - capture_system_snapshot
+    - capture_memory_dumps
+    
+  analysis:
+    identify_threat_type: true
+    check_containable: true
+    attempt_remediation: true
+    
+  remediation_actions:
+    - kill_malicious_process
+    - quarantine_infected_files
+    - revoke_compromised_credentials
+    - patch_vulnerability
+    - verify_system_integrity
+    
+  if_remediation_fails:
+    - save_complete_logs
+    - save_memory_dumps
+    - save_network_capture
+    - create_forensic_snapshot
+    - initiate_controlled_reboot
+    - boot_into_recovery_mode
+    
+  forensics:
+    save_everything: true
+    evidence_path: /var/lib/reaper/forensics/lockdown
+    include:
+      - full_system_logs
+      - memory_dumps
+      - process_list
+      - network_connections
+      - file_modifications
+      - screenshots
+      - keystroke_logs
+
+# ============================================================================
+# ACTIVATION TRIGGERS
+# ============================================================================
+activation_triggers:
+  automatic:
+    - root_compromise_detected
+    - core_daemon_unresponsive_90s
+    - paradigm_compromised
+    - kernel_integrity_failure
+    - multiple_failed_escalations
+    - critical_system_file_modified
+    
+  authorized_initiators:
+    - paradigm  # Primary authority
+    - sentinel  # Emergency authority (if Paradigm compromised)
+    
+  cannot_be_initiated_by:
+    - user_applications
+    - other_daemons
+    - external_signals
+
+
+
+
+# Reaper-OS Security Mode: SECURE
+# Description: Active breach response - system under attack
+# Philosophy: Defend and contain, automatic protective measures
+# Trigger: Automatic on threat detection
+
+mode_name: secure
+mode_id: 2
+philosophy: "We're under attack - defend"
+default: false
+auto_activated: true
+
+# ============================================================================
+# NETWORK POLICY
+# ============================================================================
+network:
+  enabled: true  # Unlike Lockdown, network stays up
+  default_connection: vpn_required  # Force VPN
+  
+  vpn:
+    required: true
+    kill_switch: true  # Block all traffic if VPN drops
+    providers: [wireguard]  # Fastest, most secure
+    auto_reconnect: true
+    
+  tor:
+    available: true
+    optional: true
+    
+  firewall:
+    enabled: true
+    default_policy: deny_all
+    whitelist_mode: true
+    allowed_domains: []  # Populated dynamically
+    
+  protections:
+    dns_over_https: true
+    block_known_malicious_ips: true
+    block_tor_exit_nodes: true  # Can connect TO Tor, not FROM
+    rate_limiting: true
+    syn_flood_protection: true
+    
+  monitoring:
+    level: maximum
+    packet_capture: true
+    deep_packet_inspection: true
+    dns_queries: true
+    connection_tracking: true
+    
+  restrictions:
+    block_p2p: true
+    block_torrent: true
+    block_known_c2_servers: true
+
+# ============================================================================
+# FILESYSTEM POLICY
+# ============================================================================
+filesystem:
+  read_only_paths:
+    - /boot
+    - /etc/passwd
+    - /etc/shadow
+    - /var/lib/reaper
+    
+  executable_verification:
+    required: true
+    require_signature: false  # Not all packages signed
+    require_origin: true
+    require_checksum: true
+    block_unknown_origin: true
+    
+  writable_locations:
+    - /home  # Still writable but monitored
+    - /tmp   # Writable but no execution
+    
+  mount_policy:
+    allow_new_mounts: false
+    allow_removable_media: true
+    auto_mount_usb: false
+    usb_mode: read_only  # Can read, cannot write
+    
+  file_monitoring:
+    critical_files: [/etc/passwd, /etc/shadow, /boot, /usr/bin, /usr/sbin]
+    alert_on_modification: true
+    log_all_writes: true
+    block_modifications: [/boot, /etc/passwd, /etc/shadow]
+    
+  suspicious_files:
+    action: quarantine
+    quarantine_path: /var/quarantine
+    
+  tmp_restrictions:
+    no_execute: true  # Files in /tmp cannot be executed
+
+# ============================================================================
+# PROCESS POLICY
+# ============================================================================
+process:
+  execution_restrictions:
+    allow_unverified: false
+    require_origin: true
+    require_verification: true
+    
+  resource_limits:
+    enabled: true
+    max_cpu_percent: 50
+    max_memory_mb: 2048
+    max_processes_per_user: 100
+    
+  process_isolation:
+    enabled: true  # Automatic sandboxing
+    trust_level: low
+    
+  suspicious_behavior:
+    monitoring: active
+    action: quarantine  # Don't kill, but isolate
+    
+    triggers:
+      - network_connection_attempt
+      - privilege_escalation
+      - parent_process_mismatch
+      - rapid_process_spawning
+      - syscall_anomaly
+      
+  whitelist:
+    core_daemons: always_allowed
+    system_processes: always_allowed
+    user_applications: require_approval
+    
+  debuggers:
+    allowed: false
+  
+  ptrace:
+    allowed: false
+
+# ============================================================================
+# HARDWARE POLICY
+# ============================================================================
+hardware:
+  usb:
+    allow_devices: true
+    auto_mount_storage: false
+    require_approval_new_devices: true
+    block_hid_injection: true
+    block_storage_write: true
+    
+  peripherals:
+    webcam:
+      enabled: true
+      require_per_use_approval: true
+      indicator_required: true
+      
+    microphone:
+      enabled: true
+      require_per_use_approval: true
+      
+    bluetooth:
+      enabled: false
+      
+  firmware_updates:
+    allowed: false  # Prevent firmware-level attacks
+
+# ============================================================================
+# PRIVILEGE POLICY
+# ============================================================================
+privileges:
+  sudo:
+    enabled: true
+    require_password: true
+    require_2fa: true  # Additional security
+    timeout_minutes: 1  # Very short timeout
+    log_all_commands: true
+    
+  root_access:
+    allowed: true
+    require_justification: true  # Must explain why
+    audit_all_actions: true
+    alert_on_use: true
+    
+  setuid_binaries:
+    allowed: true
+    whitelist_only: true
+    
+  polkit:
+    enabled: true
+    deny_by_default: true
+
+# ============================================================================
+# MONITORING POLICY
+# ============================================================================
+monitoring:
+  logging_level: enhanced
+  
+  log_categories:
+    authentication: true
+    network_connections: true
+    file_modifications: true
+    process_execution: true
+    syscalls: false  # Too much data
+    privilege_escalations: true
+    
+  retention:
+    days: 90
+    compress_after_days: 1
+    never_delete_security_events: true
+    
+  alerting:
+    immediate_alerts:
+      - any_network_activity
+      - any_file_modification
+      - process_killed
+      - unverified_execution
+      - privilege_attempt
+      - usb_device_inserted
+      
+  snapshots:
+    enabled: true
+    interval_minutes: 5
+    keep_last_n: 12  # 1 hour of history
+
+# ============================================================================
+# CRYPTOGRAPHY POLICY
+# ============================================================================
+crypto:
+  enforce_encryption:
+    new_files: true
+    all_network_traffic: true
+    
+  vault:
+    auto_lock: true
+    timeout_minutes: 5
+    
+  clipboard:
+    enabled: true
+    clear_passwords_after_seconds: 30
+    log_clipboard_use: true
+    
+  swap_encryption:
+    required: true
+
+# ============================================================================
+# AUTOMATIC ESCALATION TRIGGERS
+# ============================================================================
+escalation:
+  to_lockdown:
+    triggers:
+      - threat_persists_for_minutes: 5
+      - multiple_suspicious_processes: 3
+      - core_daemon_compromise
+      - repeated_privilege_escalation_attempts: 3
+      
+  de_escalation:
+    to_casual:
+      conditions:
+        - threat_resolved: true
+        - clean_operation_hours: 24
+        - user_confirmation: required
+
+# ============================================================================
+# USER EXPERIENCE
+# ============================================================================
+ui:
+  visual_indicator:
+    border_color: yellow
+    icon: 🟡
+    overlay: subtle_yellow_corner
+    
+  notifications:
+    priority: high
+    sound: true
+    show_all_actions: true
+    
+  restrictions_notice:
+    show_on_mode_enter: true
+    message: |
+      ⚠️ SECURE MODE ACTIVATED
+      
+      Reason: {trigger_reason}
+      
+      Enhanced security measures active:
+      ✓ All traffic through VPN
+      ✓ USB devices read-only  
+      ✓ Privileged operations require 2FA
+      ✓ Enhanced monitoring active
+      
+      System will return to normal after:
+      └─ 24 hours of clean operation
+      
+      Manual exit: reaper mode casual
+
+# ============================================================================
+# THREAT RESPONSE
+# ============================================================================
+threat_response:
+  on_detection:
+    - quarantine_suspicious_process
+    - capture_memory_snapshot
+    - log_all_network_connections
+    - notify_user
+    - increase_monitoring
+    
+  on_persistence:
+    - escalate_to_lockdown
+    
+  forensics:
+    save_evidence: true
+    evidence_path: /var/lib/reaper/forensics
+
+
+
+
+# Reaper-OS Security Mode: CASUAL
+# Description: Normal daily computing with user-controlled security
+# Philosophy: Convenience-first, user decides security level
+# Default Mode: YES
+
+mode_name: casual
+mode_id: 1
+philosophy: "Normal life, user in control"
+default: true
+
+# ============================================================================
+# NETWORK POLICY
+# ============================================================================
+network:
+  enabled: true
+  default_connection: clearnet  # No forced VPN/Tor
+  
+  # User can toggle these features
+  toggles:
+    vpn:
+      available: true
+      default: false
+      providers: [wireguard, openvpn]
+    
+    tor:
+      available: true
+      default: false
+      exit_node_preference: auto
+    
+    firewall:
+      enabled: true
+      default_policy: allow_outbound
+      block_incoming: true
+      
+  # Basic protections always on
+  protections:
+    dns_over_https: true
+    block_known_malicious_ips: true
+    rate_limiting: false
+  
+  # Monitoring
+  logging:
+    level: basic  # Connection attempts, blocked connections
+    packet_capture: false
+    dns_queries: false
+
+# ============================================================================
+# FILESYSTEM POLICY
+# ============================================================================
+filesystem:
+  read_only_paths: []  # Nothing read-only in Casual
+  
+  executable_verification:
+    required: false  # Can run anything
+    warn_unsigned: true  # But warn about it
+    check_origin: false
+  
+  writable_locations:
+    - /home
+    - /tmp
+    - /var/tmp
+    - /opt
+  
+  mount_policy:
+    allow_new_mounts: true
+    allow_removable_media: true
+    auto_mount_usb: true
+    usb_mode: read_write
+  
+  file_monitoring:
+    critical_files: [/etc/passwd, /etc/shadow, /boot]
+    alert_on_modification: true
+    log_all_writes: false
+
+# ============================================================================
+# PROCESS POLICY
+# ============================================================================
+process:
+  execution_restrictions:
+    allow_unverified: true
+    require_origin: false
+    
+  resource_limits:
+    enabled: false  # No limits in Casual
+    
+  process_isolation:
+    enabled: false  # No sandboxing by default
+    optional_sandboxing: true  # User can enable per-app
+  
+  suspicious_behavior:
+    monitoring: passive  # Detect but don't block
+    action: alert_only
+    
+  allowed_debuggers: true
+  allow_ptrace: true
+
+# ============================================================================
+# HARDWARE POLICY
+# ============================================================================
+hardware:
+  usb:
+    allow_devices: true
+    auto_mount_storage: true
+    block_hid_injection: true  # Prevent BadUSB attacks
+    
+  peripherals:
+    webcam:
+      enabled: true
+      indicator_required: true  # LED must be on when active
+      
+    microphone:
+      enabled: true
+      indicator_required: false
+      
+    bluetooth:
+      enabled: true
+      discoverable: false
+      
+  firmware_updates:
+    allowed: true
+    require_confirmation: true
+    verify_signature: true
+
+# ============================================================================
+# PRIVILEGE POLICY
+# ============================================================================
+privileges:
+  sudo:
+    enabled: true
+    require_password: true
+    timeout_minutes: 15  # Remember password for 15 min
+    
+  root_access:
+    allowed: true
+    audit_all_actions: true
+    
+  setuid_binaries:
+    allowed: true
+    whitelist_only: false
+    
+  polkit:
+    enabled: true
+    require_auth: true
+
+# ============================================================================
+# MONITORING POLICY
+# ============================================================================
+monitoring:
+  logging_level: standard
+  
+  log_categories:
+    authentication: true
+    network_connections: true
+    file_modifications: false  # Too noisy
+    process_execution: false
+    syscalls: false
+    
+  retention:
+    days: 7
+    compress_after_days: 1
+    
+  alerting:
+    immediate_alerts:
+      - failed_login_threshold  # 5 failures in 10 min
+      - root_access
+      - critical_file_modification
+    
+  snapshots:
+    enabled: false
+    interval_minutes: null
+
+# ============================================================================
+# CRYPTOGRAPHY POLICY
+# ============================================================================
+crypto:
+  enforce_encryption:
+    new_files: false  # Optional
+    sensitive_dirs: [~/.ssh, ~/.gnupg]
+    
+  vault:
+    auto_lock: true
+    timeout_minutes: 15
+    
+  clipboard:
+    enabled: true
+    clear_passwords_after_seconds: 60
+    
+  swap_encryption:
+    required: false
+
+# ============================================================================
+# AUTOMATIC ESCALATION TRIGGERS
+# ============================================================================
+escalation:
+  to_secure:
+    triggers:
+      - failed_login_attempts: 5 in 10 minutes
+      - unverified_process_network_activity
+      - suspicious_file_modification
+      - malware_signature_detected
+      
+  to_lockdown:
+    triggers:
+      - root_compromise_detected
+      - core_daemon_unresponsive
+      - kernel_integrity_failure
+      - paradigm_compromise
+
+# ============================================================================
+# USER EXPERIENCE
+# ============================================================================
+ui:
+  visual_indicator:
+    border_color: green
+    icon: 🟢
+    overlay: none
+    
+  notifications:
+    priority: normal
+    sound: false
+    
+  restrictions_notice:
+    show_on_mode_enter: false
+
+# ============================================================================
+# TOGGLEABLE FEATURES
+# ============================================================================
+features:
+  available:
+    - vpn_toggle
+    - tor_toggle
+    - firewall_rules
+    - usb_autoMount
+    - webcam_access
+    - microphone_access
+    - bluetooth
+    
+  requires_restart: []  # All toggleable without restart
+
+
+
+I decided to have only these four as the main ones. Remember when I said it will be focused on cybersecurity? Meet Ghost. 
+# Reaper-OS Security Mode: GHOST
+# Description: Extreme OpSec for offensive operations in hostile environments
+# Philosophy: Hide in the dark, hunt the predators - assume everything is malware
+# Trigger: Manual only (user-initiated)
+
+mode_name: ghost
+mode_id: 4
+philosophy: "Hide in the dark - hunt and survive"
+default: false
+auto_activated: false
+manual_only: true
+offensive_posture: true
+
+# ============================================================================
+# NETWORK POLICY - EXTREME OPSEC
+# ============================================================================
+network:
+  enabled: true  # Network needed for operations
+  default_connection: tor_only
+  
+  tor:
+    required: true
+    multi_hop: true  # Extra security
+    exit_node_preference: random
+    circuit_rotation_minutes: 10
+    isolate_per_application: true
+    
+  vpn:
+    available: true
+    chain_with_tor: true  # VPN → Tor or Tor → VPN
+    
+  anonymization:
+    mac_address_randomization: every_boot
+    hostname_randomization: true
+    hostname_format: random  # random-af3d2
+    timezone: utc  # Never leak local timezone
+    user_agent_randomization: true
+    canvas_fingerprint_resistance: true
+    webrtc: disabled  # Prevent IP leaks
+    
+  firewall:
+    enabled: true
+    default_policy: deny_all
+    whitelist_mode: true
+    block_clearnet: true  # No direct connections
+    
+  dns:
+    provider: tor_dns_only
+    block_system_dns: true
+    dnssec: required
+    
+  monitoring:
+    level: forensic
+    packet_capture: true
+    full_pcap: true
+    deep_packet_inspection: true
+    timing_analysis: true
+    side_channel_detection: true
+    
+  restrictions:
+    no_persistent_connections: true
+    no_websockets: true  # Can leak identity
+    no_webrtc: true
+    block_geolocation_api: true
+
+# ============================================================================
+# FILESYSTEM POLICY - TOTAL ISOLATION
+# ============================================================================
+filesystem:
+  isolation_mode: overlay
+  
+  ghost_partition:
+    path: /ghost
+    ephemeral: true  # Changes discarded unless saved
+    
+    structure:
+      - /ghost/root      # Ephemeral root overlay
+      - /ghost/home      # Isolated home
+      - /ghost/tmp       # Isolated temp
+      - /ghost/apps      # Installed applications
+      - /ghost/logs      # Forensic logs (persisted)
+      
+  blocked_paths:
+    - /home            # Real home BLOCKED
+    - /etc             # Read-only overlay
+    - /var             # BLOCKED except /var/log/ghost
+    - /root            # BLOCKED
+    - /boot            # BLOCKED
+    
+  writable_paths:
+    - /ghost/*         # Everything in Ghost
+    
+  overlay_filesystem:
+    lower_layer: /  # Real filesystem (read-only)
+    upper_layer: /ghost/overlay
+    work_dir: /ghost/.work
+    merged_view: /ghost/root
+    
+  executable_verification:
+    required: false  # May run malware intentionally
+    log_all_executions: true
+    
+  installation:
+    destination: /ghost/apps
+    cannot_modify_real_system: true
+    
+  on_exit:
+    options:
+      - discard_all      # Wipe everything
+      - preserve_ghost   # Keep /ghost for next session
+      - export_logs      # Save logs for analysis
+      
+  tmp_policy:
+    isolated: true
+    path: /ghost/tmp
+    wipe_on_exit: true
+
+# ============================================================================
+# PROCESS POLICY - EXTREME ISOLATION
+# ============================================================================
+process:
+  isolation_mode: maximum
+  
+  namespaces:
+    pid: isolated     # Cannot see other processes
+    network: isolated # Separate network stack
+    mount: isolated   # Separate filesystem view
+    ipc: isolated     # Cannot communicate with host
+    uts: isolated     # Separate hostname
+    user: isolated    # UID mapping
+    
+  per_application_isolation:
+    enabled: true
+    
+    example:
+      browser:
+        pid_namespace: browser_ns
+        network_namespace: browser_net
+        cannot_see: [terminal, other_apps]
+        
+      terminal:
+        pid_namespace: terminal_ns
+        network_namespace: terminal_net
+        cannot_see: [browser, other_apps]
+        
+  resource_limits:
+    enabled: true
+    per_application:
+      max_cpu_percent: 50
+      max_memory_mb: 4096
+      max_processes: 50
+      
+  execution_policy:
+    allow_unverified: true  # Intentionally run malware
+    monitor_everything: true
+    
+  suspicious_behavior:
+    action: log_and_monitor  # Don't block, observe
+    triggers:
+      - network_connection
+      - file_access
+      - process_spawn
+      - syscall_patterns
+      
+  allow_debuggers: true  # For reverse engineering
+  allow_ptrace: true
+
+# ============================================================================
+# HARDWARE POLICY
+# ============================================================================
+hardware:
+  usb:
+    allow_devices: true
+    sandboxed: true  # Files copied to /ghost, not direct access
+    
+  peripherals:
+    webcam:
+      enabled: true
+      require_per_use_approval: true
+      indicator_required: true
+      
+    microphone:
+      enabled: true
+      require_per_use_approval: true
+      
+    bluetooth:
+      enabled: false  # Too risky for fingerprinting
+      
+  sensors:
+    accelerometer: disabled  # Fingerprinting vector
+    gyroscope: disabled
+    ambient_light: disabled
+    
+  firmware_updates:
+    blocked: true
+
+# ============================================================================
+# PRIVILEGE POLICY
+# ============================================================================
+privileges:
+  sudo:
+    enabled: true  # User needs control
+    require_password: true
+    timeout_minutes: 5
+    log_all_commands: true
+    
+  root_access:
+    allowed: true  # For pentesting tools
+    within_namespace: true  # Root in Ghost, not on host
+    audit_all_actions: true
+    
+  setuid_binaries:
+    allowed: true
+    within_ghost_only: true
+    
+  polkit:
+    enabled: true
+    ghost_isolated: true
+
+# ============================================================================
+# MONITORING POLICY - FORENSIC LEVEL
+# ============================================================================
+monitoring:
+  logging_level: forensic
+  
+  log_categories:
+    syscalls: true           # Every single syscall
+    network_packets: true    # Full packet capture
+    file_access: true        # Every file operation
+    process_execution: true  # Every exec
+    memory_access: true      # Memory patterns
+    ipc: true               # All IPC
+    timing: true            # Timing information
+    
+  syscall_logging:
+    include_arguments: true
+    include_return_values: true
+    include_stack_traces: false  # Too much data
+    
+  network_logging:
+    full_pcap: true
+    decode_protocols: true
+    extract_files: true
+    
+  retention:
+    days: infinite  # User decides when to delete
+    path: /ghost/logs/session_{timestamp}
+    
+  snapshots:
+    enabled: true
+    interval_minutes: 5
+    include_memory: true
+    
+  estimated_log_size:
+    per_hour: 50GB+  # Warning: MASSIVE logs
+    
+  compression:
+    enabled: true
+    algorithm: zstd
+
+# ============================================================================
+# CRYPTOGRAPHY POLICY
+# ============================================================================
+crypto:
+  enforce_encryption:
+    all_ghost_files: true
+    all_network_traffic: true
+    
+  vault:
+    accessible: true
+    auto_lock_minutes: 5
+    
+  clipboard:
+    enabled: true
+    encrypted: true
+    clear_after_seconds: 30
+    
+  swap:
+    encrypted: true
+    wipe_on_exit: true
+
+# ============================================================================
+# OPERATIONAL SECURITY
+# ============================================================================
+opsec:
+  anti_forensics:
+    wipe_ram_on_exit: true
+    secure_delete: true  # Overwrite deleted files
+    no_hibernation: true
+    no_swap_to_disk: true
+    
+  anti_fingerprinting:
+    randomize_hardware_ids: true
+    randomize_font_list: true
+    randomize_screen_resolution: false  # Too obvious
+    resist_canvas_fingerprinting: true
+    resist_audio_fingerprinting: true
+    
+  anti_tracking:
+    block_analytics: true
+    block_trackers: true
+    cookie_isolation: true
+    clear_cookies_on_exit: true
+    
+  metadata_scrubbing:
+    strip_exif: true
+    strip_pdf_metadata: true
+    strip_document_metadata: true
+
+# ============================================================================
+# TOOLS & CAPABILITIES
+# ============================================================================
+tools:
+  pentesting_tools:
+    available: true
+    installed_to: /ghost/apps
+    
+    categories:
+      - reconnaissance
+      - exploitation
+      - post_exploitation
+      - forensics
+      - reverse_engineering
+      
+  malware_analysis:
+    sandbox: builtin
+    monitoring: comprehensive
+    
+  network_analysis:
+    packet_capture: true
+    protocol_analysis: true
+    traffic_generation: true
+
+# ============================================================================
+# USER EXPERIENCE
+# ============================================================================
+ui:
+  visual_indicator:
+    border_color: black
+    icon: ⚫
+    overlay: black_corner_indicator
+    terminal_prefix: "[GHOST]"
+    
+  notifications:
+    priority: normal
+    sound: false  # Stealth
+    minimize_indicators: true
+    
+  restrictions_notice:
+    show_on_mode_enter: true
+    message: |
+      ⚫ GHOST MODE ACTIVE
+      
+      Extreme OpSec enabled:
+      ✓ All traffic through Tor
+      ✓ MAC address randomized
+      ✓ Complete isolation from host
+      ✓ Forensic logging active
+      
+      WARNING: Log sizes can exceed 50GB/hour
+      
+      You are operating in: /ghost
+      Real system is protected from your activities.
+      
+      Exit options:
+      [1] Discard all changes
+      [2] Preserve /ghost for next session  
+      [3] Export logs for analysis
+
+# ============================================================================
+# SESSION MANAGEMENT
+# ============================================================================
+session:
+  on_enter:
+    - create_ghost_overlay
+    - randomize_mac_address
+    - randomize_hostname
+    - start_tor_circuits
+    - isolate_namespaces
+    - begin_forensic_logging
+    - display_opsec_checklist
+    
+  during_session:
+    - monitor_all_activity
+    - rotate_tor_circuits
+    - log_to_ghost_partition
+    - isolate_per_application
+    
+  on_exit:
+    prompt_user:
+      - "Discard all changes?"
+      - "Save /ghost partition?"
+      - "Export logs?"
+      
+    actions:
+      - wipe_ram
+      - wipe_swap
+      - optionally_wipe_ghost
+      - restore_mac_address
+      - restore_hostname
+      - stop_tor
+      
+  automatic_exit:
+    triggers:
+      - critical_breach_detected
+      - host_system_compromised
+      
+    action: immediate_wipe
+
+# ============================================================================
+# ISOLATION DETAILS
+# ============================================================================
+isolation:
+  what_ghost_sees:
+    filesystem:
+      /: overlay (changes don't affect real system)
+      /home: /ghost/home (empty initially)
+      /etc: read-only overlay
+      /tmp: /ghost/tmp
+      
+    processes:
+      - Only processes in Ghost namespace
+      - Cannot see host processes
+      - Cannot see other Ghost apps
+      
+    network:
+      - Only Tor
+      - Cannot see host connections
+      - Isolated per-application
+      
+  what_ghost_cannot_access:
+    - Real /home
+    - Real /etc (write)
+    - Real /var
+    - Host processes
+    - Host network connections
+    - Hardware directly (sandboxed)
+    
+  protections:
+    - Malware in Ghost cannot escape
+    - Malware cannot see real data
+    - Malware cannot persist to host
+    - Changes discarded on exit (if chosen)
+
+# ============================================================================
+# AUTOMATIC ESCALATION (Even in Ghost)
+# ============================================================================
+escalation:
+  to_secure:
+    triggers:
+      - ghost_escape_attempt
+      - host_system_access_attempt
+      
+  to_lockdown:
+    triggers:
+      - critical_host_breach
+      - paradigm_compromise
+      
+  note: "Even Ghost can escalate if host is threatened"

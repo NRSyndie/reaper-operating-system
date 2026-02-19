@@ -1,0 +1,25 @@
+# Toolchain and local compiler build outputs
+toolchain/
+build-gcc/
+
+# Boot/build artifacts
+*.o
+*.a
+*.elf
+*.iso
+*.bin
+*.img
+
+# Runtime/test logs
+*.log
+kernel/serial*.log
+kernel/qemu*.log
+kernel/*test*.log
+
+# Generic temp/cache
+*.tmp
+*.swp
+.DS_Store
+
+# Nested repo clone used as scratch
+reaper-os/

@@ -1,0 +1,42 @@
+#ifndef USER_REAPER_H
+#define USER_REAPER_H
+
+#include <stdint.h>
+#include "../../shared/include/bootinfo.h"
+#include "../../shared/include/capability.h"
+#include "../../shared/include/mode.h"
+#include "../../shared/include/syscall.h"
+
+void sys_log(const char* msg);
+int sys_log_checked(const char* msg);
+void sys_exit(int code);
+void sys_yield(void);
+int sys_wait(uint64_t flags);
+int sys_mode_query(void);
+
+/* Recursive VMM API (strict contract enforced by kernel) */
+int sys_map(uint32_t parent_cap, uint32_t index, uint32_t child_cap, uint64_t flags);
+int sys_map_strict(uint32_t parent_cap, uint32_t index, uint32_t child_cap, uint64_t flags);
+int sys_unmap(uint32_t parent_cap, uint32_t index);
+int sys_unmap_strict(uint32_t parent_cap, uint32_t index);
+int sys_cap_retype(uint32_t src, uint32_t dst, uint32_t new_type, uint32_t badge);
+int sys_frame_alloc(uint32_t slot);
+int sys_cap_delete(uint32_t slot);
+
+int sys_lattice_create(uint32_t page_count, uint32_t slot);
+int sys_lattice_create_broadcast(uint32_t page_count, uint32_t source_slot, uint32_t listener_count, uint32_t listener_slot0, uint32_t listener_slot1);
+int sys_lattice_attach(uint32_t lattice_cap, uint64_t vaddr);
+int sys_lattice_detach(uint32_t lattice_cap, uint64_t vaddr);
+int sys_attune(uint32_t lattice_cap, uint32_t index);
+int sys_cap_mint(uint32_t src, uint32_t dst, uint16_t rights, uint32_t badge, uint8_t modes);
+int sys_fate_read(void* buffer, int count, uint32_t audit_cap);
+int sys_fate_read_ex(void* buffer, int count, uint32_t audit_cap, uint32_t read_mode);
+int sys_audit(uint64_t target_pid, uint64_t flags, void* out_buf, uint64_t count);
+
+/* String utils (implemented in string.c or similar) */
+void* memset(void* dest, int c, unsigned long n);
+void* memcpy(void* dest, const void* src, unsigned long n);
+unsigned long strlen(const char* str);
+char* itoa(long value, char* str, int base);
+
+#endif /* USER_REAPER_H */

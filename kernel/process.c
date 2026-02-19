@@ -1,0 +1,125 @@
+#include "include/process.h"
+#include "include/vmm.h"
+#include "include/pcid.h"
+#include "include/slab.h"
+#include "include/utils.h"
+#include "include/console.h"
+#include "include/klog.h"
+#include "include/capability.h"
+#include "include/pmm.h"
+#include "include/mode.h" // Added include
+#include "include/ipc.h"
+
+static uint32_t next_pid = 1;
+static slab_cache_t* process_cache = NULL;
+
+process_t* process_create(uint64_t pml4, uint16_t pcid, cnode_t* cspace, mode_id_t mode) { // Updated signature
+    if (!process_cache) {
+        process_cache = slab_create_cache("ProcessCache", sizeof(process_t), 8);
+    }
+
+    process_t* p = (process_t*)slab_alloc(process_cache);
+    if (!p) {
+        klog_error("PROCESS: Failed to allocate process_t from cache.");
+        return NULL;
+    }
+
+    p->pml4_phys = pml4;
+    p->pcid = pcid;
+    p->cspace = cspace;
+    p->pid = next_pid++;
+    p->thread_count = 0;
+    p->mode = mode; // Initialize new mode field
+    p->waiter_thread = NULL;
+    p->exit_events = 0;
+
+    // Zero out lattice attachments
+    for (int i = 0; i < MAX_PROCESS_LATTICES; i++) {
+        p->lattices[i].lattice = NULL;
+        p->lattices[i].vaddr = 0;
+    }
+
+    klog_debug("PROCESS: Created PID %u (PML4: 0x%lx, PCID: %u, Mode: %d)", p->pid, p->pml4_phys, p->pcid, p->mode);
+
+    return p;
+}
+
+void process_destroy(process_t* process) {
+    if (!process) return;
+
+    klog_debug("PROCESS: Destroying PID %u (PCID: %u, Mode: %d)", process->pid, process->pcid, process->mode);
+
+    /* 1. Release Hardware PCID */
+    if (process->pcid != PCID_ERROR) { // Check for PCID_ERROR before freeing
+        pcid_free(process->pcid, process->mode); // Updated call
+    }
+
+    /* 2. Annihilate the Reality (User-space PML4) */
+    vmm_destroy_pml4(process->pml4_phys);
+
+    /* 3. Drop lattice attachment references owned by this process. */
+    for (int i = 0; i < MAX_PROCESS_LATTICES; i++) {
+        if (process->lattices[i].lattice) {
+            mode_log_lattice_event(process->pid,
+                                   process->lattices[i].vaddr,
+                                   process->lattices[i].page_count,
+                                   process->lattices[i].is_source,
+                                   false);
+            lattice_destroy(process->lattices[i].lattice);
+            process->lattices[i].lattice = NULL;
+            process->lattices[i].vaddr = 0;
+            process->lattices[i].page_count = 0;
+            process->lattices[i].is_source = false;
+        }
+    }
+
+    /* 4. Release Authority (CSpace) */
+    if (process->cspace) {
+        cnode_destroy(process->cspace);
+    }
+
+    slab_free(process_cache, process);
+}
+
+int process_attach_lattice(process_t* proc, struct lattice* lattice, uint64_t vaddr, bool is_source) {
+    if (!proc || !lattice) return -1;
+
+    // Find a free slot
+    for (int i = 0; i < MAX_PROCESS_LATTICES; i++) {
+        if (proc->lattices[i].lattice == NULL) {
+            proc->lattices[i].lattice = lattice;
+            proc->lattices[i].vaddr = vaddr;
+            proc->lattices[i].page_count = lattice->page_count;
+            proc->lattices[i].is_source = is_source;
+            
+            lattice_ref(lattice);
+            mode_log_lattice_event(proc->pid, vaddr, lattice->page_count, is_source, true);
+            return 0;
+        }
+    }
+
+    return -1; // No slots
+}
+
+int process_detach_lattice(process_t* proc, struct lattice* lattice, uint64_t vaddr) {
+    if (!proc || !lattice) return -1;
+
+    for (int i = 0; i < MAX_PROCESS_LATTICES; i++) {
+        if (proc->lattices[i].lattice == lattice && proc->lattices[i].vaddr == vaddr) {
+            mode_log_lattice_event(proc->pid,
+                                   proc->lattices[i].vaddr,
+                                   proc->lattices[i].page_count,
+                                   proc->lattices[i].is_source,
+                                   false);
+
+            lattice_destroy(proc->lattices[i].lattice);
+            proc->lattices[i].lattice = NULL;
+            proc->lattices[i].vaddr = 0;
+            proc->lattices[i].page_count = 0;
+            proc->lattices[i].is_source = false;
+            return 0;
+        }
+    }
+
+    return -1;
+}
