@@ -147,11 +147,11 @@ Reaper-OS: Development Roadmap
    | Day 45 [DONE] | VMM Region Contract Final        | Partial bridge implementations can leave map/   | Completed contract-op/result model, transactional apply+rollback, |
    |               | Closure (Map/Unmap + Rollback)   | unmap asymmetry and weak failure semantics.     | unmap parity, metrics/self-test gates, and matrix-validated runtime. |
    +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
-   | Day 46 [WIP]  | Final-Product Envelope           | Architecture drift across mode/PCID/audit paths | Re-baseline around execution envelopes with gated compile/verify |
-   |               | Re-Baseline (Phase 0/1)          | can reduce determinism and release confidence.  | /apply/attest delivery and compatibility-first migration.        |
+   | Day 46 [DONE] | Final-Product Envelope           | Architecture drift across mode/PCID/audit paths | Implemented kernel execution-envelope compile/verify/apply/attest |
+   |               | Re-Baseline (Phase 0/1)          | can reduce determinism and release confidence.  | pipeline with rollback markers while preserving compatibility.    |
    +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
-   | Day 47 [WIP]  | Day 5R Multi-Mode Envelope       | Legacy mode-transition policy can drift from     | Define envelope-native multi-mode transition contract and map      |
-   |               | Logic Kickoff (Phase 2 Bridge)   | scheduler/capability behavior during migration.  | Day 5 legality/escalation semantics into compile/verify/apply flow. |
+   | Day 47 [DONE] | Day 5R Multi-Mode Envelope       | Legacy mode-transition policy can drift from     | Added kernel envelope transition markers and Paradigm acceptance/   |
+   |               | Logic Kickoff (Phase 2 Bridge)   | scheduler/capability behavior during migration.  | rejection probes tied to Day 5 legality/escalation semantics.      |
    +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
    | Day 48 [DONE] | Day 6/Day 7 Final-Product        | Allocator/capability closure drift can leave    | Completed allocator and capability final-product redesign closure,   |
    |               | Redesign Closure                 | foundational primitives below release bar.      | expanded redesign self-tests, and revalidated full build/runtime gates. |
@@ -171,9 +171,9 @@ Reaper-OS: Development Roadmap
    | Day 53 [DONE] | Syscall ABI v2 Gate              | Direct userspace invocation of internal syscall | Implemented single-entry `SYS_GATE_CALL` ABI with `GATE_OP_*` operations, |
    |               | Envelope Implementation          | numbering reduces boundary control and agility. | migrated userspace wrappers, and validated matrix/runtime markers.         |
    +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
-   | Day 54 [WIP]  | ESAK Scheduler Authority +       | Scheduler authority drift and SMP budget races | Added root/thread sched-auth capabilities, deterministic weighted RR tokens,   |
+   | Day 54 [DONE] | ESAK Scheduler Authority +       | Scheduler authority drift and SMP budget races | Added root/thread sched-auth capabilities, deterministic weighted RR tokens,   |
    |               | Atomic Budget Hardening          | can violate ceiling/revocation invariants.     | atomic process-budget primitives, revoke-immediate dequeue path, expanded       |
-   |               |                                  |                                                | runtime markers, and matrix-gated ESAK probes (BSP-only IPI preempt deferred). |
+   |               |                                  |                                                | runtime markers, and ratified BSP-only ESAK product profile marker.            |
    +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
 
 
@@ -241,7 +241,7 @@ All foundational debts listed above have been successfully repaid... table:: Fut
 Project Estimates & Status
 --------------------------
 
-*   **Current Phase:** Epoch III, Day 54 (ESAK scheduler authority + atomic budget hardening is active; core invariants are matrix-gated while full SMP IPI preemption remains deferred under BSP runtime on February 21, 2026).
+*   **Current Phase:** Epoch III Closure Ratification (Days 46/47/54 closed on February 22, 2026 with envelope evidence and BSP-only ESAK profile).
 *   **Total Estimated Time:** 13 - 19 Weeks (~4 Months).
 *   **Strategy:** Reaper Envelope (Compatibility-First ABI + Hardware-Enforced Envelope Tiers).
 

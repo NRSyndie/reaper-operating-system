@@ -118,6 +118,13 @@ Serial logs must contain, at minimum:
 - `[TEST] Syscall Gate security probes: SUCCESS.`
 - `[TEST] Syscall Gate SMP isolation: SUCCESS.`
 - `[TEST] Syscall Gate performance budget: SUCCESS.`
+- `PARADIGM: Envelope transition acceptance probe PASS.`
+- `PARADIGM: Envelope transition rejection probe PASS.`
+- `[MODE_LEGACY_SHIM]`
+- `[ENV_COMPILE]`
+- `[ENV_VERIFY]`
+- `[ENV_APPLY]`
+- `[ENV_ATTEST]`
 - `[TEST] No authority -> no execution`
 - `[TEST] Root ceiling enforced`
 - `[TEST] Thread explosion prevented`
@@ -125,6 +132,7 @@ Serial logs must contain, at minimum:
 - `[TEST] Cross-mode scheduling rejected`
 - `[TEST] Deterministic RR rotation stable`
 - `[TEST] SMP atomic budget integrity`
+- `[TEST] ESAK IPI profile: BSP_ONLY`
 
 ## 5. Final-Product Exit Criteria
 

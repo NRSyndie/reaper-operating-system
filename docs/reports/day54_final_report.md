@@ -1,7 +1,7 @@
 # Epoch III, Day 54: ESAK Scheduler Authority + Atomic Budget Hardening
 
-**Date:** Saturday, February 21, 2026  
-**Status:** IN PROGRESS (core slice complete; SMP IPI activation deferred)  
+**Date:** Sunday, February 22, 2026  
+**Status:** DONE (finalized under BSP-only ESAK product profile)  
 **Modules:** `kernel/scheduler.c`, `kernel/capability.c`, `kernel/mode.c`, `kernel/main.c`, `shared/include/capability.h`, `shared/include/syscall.h`, `kernel/syscall.c`
 
 ## 1. Executive Summary
@@ -32,11 +32,12 @@ Implemented the core ESAK hardening slice for scheduler authority and budget int
   - `[TEST] Cross-mode scheduling rejected`
   - `[TEST] Deterministic RR rotation stable`
   - `[TEST] SMP atomic budget integrity`
+  - `[TEST] ESAK IPI profile: BSP_ONLY`
 
 ## 3. Why It Was Added
 
 - To enforce strict reduction-only authority semantics for scheduler control.
-- To prevent process-budget race/underflow behaviors before SMP activation.
+- To prevent process-budget race/underflow behaviors with deterministic BSP runtime guarantees.
 - To make revocation behavior auditable and fail-closed in scheduling hot paths.
 
 ## 4. Verification Evidence
@@ -49,5 +50,4 @@ Implemented the core ESAK hardening slice for scheduler authority and budget int
 
 ## 5. Known Limitations / Follow-Up
 
-- Runtime is currently BSP-only (`cpu_get_id() == 0` scaffolding), so true cross-core IPI remote preemption cannot be exercised yet.
-- Forced-reschedule request flags are in place and ready for SMP activation.
+- Product boundary is explicitly ratified as BSP-only for this final closure pass; deferred SMP IPI preemption is no longer tracked as Day 54 closure debt.

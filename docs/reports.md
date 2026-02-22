@@ -675,17 +675,15 @@
     *   [PASS] `make -C kernel iso` successful.
     *   [PASS] `make -C kernel verify_matrix` successful (3/3 runs).
 
-### Epoch III, Day 46: Final-Product Plan Re-Baseline Validation
+### Epoch III, Day 46: Final-Product Envelope Re-Baseline Closure
 *   **What was changed:**
-    *   Re-based Epoch III plan to final-product delivery gates in `docs/development_log/epoch_three_plan.md`.
-    *   Added Day 46 roadmap/state tracking and updated current strategy in `docs/development_log/TODO.rst`.
-    *   Extended release consistency checklist with execution-envelope migration gates in `docs/development_log/release_checklist.md`.
-    *   Added Day 46 closure artifacts:
-        *   `docs/reports/day46_final_report.md`
-        *   `docs/development_log/day46_checklist.md`
+    *   Implemented kernel transition envelope pipeline in `kernel/mode.c`:
+        *   compile/verify/apply/attest marker flow (`[ENV_COMPILE]`, `[ENV_VERIFY]`, `[ENV_APPLY]`, `[ENV_ATTEST]`)
+        *   rollback marker (`[ENV_ROLLBACK]`) and legacy compatibility shim marker (`[MODE_LEGACY_SHIM]`)
+    *   Added mode transition gate operation (`GATE_OP_MODE_TRANSITION`) in shared/kernel/user syscall surfaces.
 *   **Why it was changed:**
-    *   To ensure architecture re-baseline work remains release-safe (compatibility, rollback, determinism).
-    *   To align planning, roadmap status, and release checklist enforcement around the same final-product gates.
+    *   To replace planning-only envelope intent with runtime-enforced transition stages and explicit evidence.
+    *   To preserve existing compatibility while hardening determinism and traceability.
 *   **Test Results:**
     *   [PASS] `make -C user` successful.
     *   [PASS] `make -C kernel` successful.
@@ -696,17 +694,12 @@
         *   `[matrix] run 2 PASS (./serial_matrix_run2.log)`
         *   `[matrix] run 3 PASS (./serial_matrix_run3.log)`
 
-### Epoch III, Day 47: Day 5R Multi-Mode Envelope Logic Kickoff
+### Epoch III, Day 47: Day 5R Multi-Mode Envelope Logic Closure
 *   **What was changed:**
-    *   Added Day 5R mode/envelope bridge spec:
-        *   `docs/components/modes/day5r_envelope_multimode_logic.md`
-    *   Added Day 47 roadmap tracking and current-phase update in `docs/development_log/TODO.rst`.
-    *   Added Day 47 closure artifacts:
-        *   `docs/reports/day47_final_report.md`
-        *   `docs/development_log/day47_checklist.md`
+    *   Added Paradigm accepted/rejected transition probes via `sys_mode_transition(...)`.
+    *   Extended runtime matrix required markers to include envelope stage markers and Paradigm probe pass logs.
 *   **Why it was changed:**
-    *   To carry original Day 5 multi-mode logic into the final-product execution-envelope architecture.
-    *   To keep transition legality/escalation semantics explicit while scheduler/capability rebinding work begins.
+    *   To verify Day 5 legality/escalation semantics through user-visible evidence, not only design artifacts.
 *   **Test Results:**
     *   [PASS] `make -C user` successful.
     *   [PASS] `make -C kernel` successful.
@@ -866,12 +859,14 @@
     *   Added atomic process-budget consume/refill primitives with dual budget enforcement at dispatch.
     *   Added revoke-driven immediate dequeue and forced-reschedule request flags.
     *   Expanded runtime marker coverage and matrix required markers for ESAK invariants.
+    *   Added explicit final-boundary marker:
+        *   `[TEST] ESAK IPI profile: BSP_ONLY`
     *   Added/updated artifacts:
         *   `docs/reports/day54_final_report.md`
         *   `docs/development_log/day54_checklist.md`
 *   **Why it was changed:**
     *   To lock scheduler authority, budget ceilings, and revocation behavior behind deterministic, auditable contracts.
-    *   To close non-atomic budget/race exposure before SMP activation.
+    *   To close non-atomic budget/race exposure with explicit BSP-only product boundary ratification.
 *   **Test Results:**
     *   [PASS] `make -C user`
     *   [PASS] `make -C kernel`
@@ -885,3 +880,4 @@
         *   `[TEST] Cross-mode scheduling rejected`
         *   `[TEST] Deterministic RR rotation stable`
         *   `[TEST] SMP atomic budget integrity`
+        *   `[TEST] ESAK IPI profile: BSP_ONLY`

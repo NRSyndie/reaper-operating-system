@@ -33,6 +33,33 @@ int main(int argc, char** argv) {
         sys_log("PARADIGM: Reality is WRONG.");
     }
 
+    {
+        int env_probe_failures = 0;
+
+        if (sys_mode_transition(MODE_SECURE) != 0) {
+            env_probe_failures++;
+        }
+        if (sys_mode_transition(MODE_CASUAL) != 0) {
+            env_probe_failures++;
+        }
+        if (sys_mode_transition(MODE_GHOST) != 0) {
+            env_probe_failures++;
+        }
+        if (sys_mode_transition(MODE_SECURE) != -1) {
+            env_probe_failures++;
+        }
+        if (sys_mode_transition(MODE_CASUAL) != 0) {
+            env_probe_failures++;
+        }
+
+        if (env_probe_failures == 0) {
+            sys_log("PARADIGM: Envelope transition acceptance probe PASS.");
+            sys_log("PARADIGM: Envelope transition rejection probe PASS.");
+        } else {
+            sys_log("PARADIGM: Envelope transition probes FAILED.");
+        }
+    }
+
     sys_log("PARADIGM: Assuming Control.");
 
     /* Adversarial syscall boundary probes (must fail safely) */

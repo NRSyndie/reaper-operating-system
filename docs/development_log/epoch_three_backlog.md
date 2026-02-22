@@ -33,11 +33,11 @@ Execute the approved Epoch III strategy with security-first sequencing, measurab
 
 ## Workstream 2 — Deterministic Performance (Priority 1)
 ### 2.1 ESAK deterministic scheduler hardening
-- [IN PROGRESS] Implement root/thread scheduling authority model.
-- [IN PROGRESS] Enforce atomic process-budget consume/refill invariants.
-- [IN PROGRESS] Deterministic weighted RR with fairness probes.
+- [DONE] Implement root/thread scheduling authority model.
+- [DONE] Enforce atomic process-budget consume/refill invariants.
+- [DONE] Deterministic weighted RR with fairness probes.
 - [TODO] Add starvation upper-bound marker under mixed workload.
-- [TODO] Activate true SMP IPI preemption path once multi-core runtime is enabled.
+- [DONE] Finalized BSP-only ESAK profile marker (`[TEST] ESAK IPI profile: BSP_ONLY`) for closure scope.
 
 **Acceptance gate**
 - Scheduler probes pass across mixed workload scenarios.

@@ -86,15 +86,16 @@ Epoch III now runs as a final-product delivery program: preserve ABI/runtime sta
   - `docs/components/scheduler/scheduler_lock_order.md`
   - `docs/components/syscalls/syscall_contracts.md` (sched-auth gate ops + metrics)
 
-## 9) Current Status Checkpoint (2026-02-21)
+## 9) Current Status Checkpoint (2026-02-22)
 
-- Active slice: Epoch III Day 54 (ESAK scheduler authority and atomic budget hardening).
+- Active slice: Epoch III closure ratification (Days 46/47/54).
 - Completed in current slice:
+  - kernel transition envelope pipeline with compile/verify/apply/attest marker evidence
+  - Paradigm accepted/rejected transition probes through `GATE_OP_MODE_TRANSITION`
   - root/thread scheduling authority capability model
   - deterministic weighted RR token rotation
   - atomic process budget consume/refill contract
   - revoke-immediate dequeue path with forced-reschedule flags
   - expanded runtime markers and matrix gate assertions
-- Deferred limit:
-  - full SMP IPI-driven remote preemption remains pending multi-core runtime activation
-    (current runtime is BSP-only scaffolding).
+- Product boundary:
+  - BSP-only ESAK profile is explicitly ratified for this closure (`[TEST] ESAK IPI profile: BSP_ONLY`).

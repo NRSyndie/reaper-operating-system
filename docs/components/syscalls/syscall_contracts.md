@@ -23,6 +23,18 @@ The actual operation is selected by gate op id (`GATE_OP_*`) and a fixed payload
 `gate_call_msg_t` carries per-operation arguments in `args[0..5]`.
 Kernel translates gate op -> internal handler id and applies the same validation/security rules described below.
 
+## `GATE_OP_MODE_TRANSITION` (25)
+
+ABI:
+
+- `a0`: target mode (`MODE_CASUAL|MODE_SECURE|MODE_LOCKDOWN|MODE_GHOST`)
+
+Required invariants:
+
+- Transition is evaluated by kernel envelope pipeline (`compile -> verify -> apply -> attest`).
+- Illegal transitions fail closed with `-1`.
+- Legacy mode transition legality is preserved under envelope verification.
+
 ## General Return Rules
 
 - `0`: Success.

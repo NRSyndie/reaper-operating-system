@@ -28,6 +28,22 @@ typedef enum {
 } transition_source_t;
 
 typedef enum {
+    ENV_CLASS_NONE = 0,
+    ENV_CLASS_BASELINE = 1,
+    ENV_CLASS_DEFENSIVE = 2,
+    ENV_CLASS_FAIL_CLOSED = 3,
+    ENV_CLASS_EPHEMERAL = 4
+} envelope_class_t;
+
+typedef enum {
+    ENV_DENY_NONE = 0,
+    ENV_DENY_TARGET_INVALID = 1,
+    ENV_DENY_GHOST_TO_SECURE = 2,
+    ENV_DENY_LOCKDOWN_TO_GHOST = 3,
+    ENV_DENY_LOCKDOWN_TO_SECURE = 4
+} envelope_deny_t;
+
+typedef enum {
     FATE_RESULT_ACCEPTED = 0,
     FATE_RESULT_REJECTED = 1
 } fate_result_t;

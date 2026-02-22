@@ -11,8 +11,8 @@
 - [x] Added Day 5R multi-mode envelope logic contract doc
 - [x] Added Day 47 roadmap entry and active phase update
 - [x] Added Day 47 report/checklist/version synchronization
-- [ ] Implement kernel envelope transition marker path
-- [ ] Implement Paradigm envelope transition probes
+- [x] Implemented kernel envelope transition marker path (`[ENV_COMPILE]`, `[ENV_VERIFY]`, `[ENV_APPLY]`, `[ENV_ATTEST]`, `[MODE_LEGACY_SHIM]`)
+- [x] Implemented Paradigm envelope transition probes (accepted and rejected transition visibility)
 
 ## Documentation Sync
 - [x] Added day report: `docs/reports/day47_final_report.md`

@@ -35,6 +35,7 @@
 #define GATE_OP_SCHED_METRICS   22
 #define GATE_OP_SCHED_AUTH_ROOT_MINT   23
 #define GATE_OP_SCHED_AUTH_THREAD_DERIVE 24
+#define GATE_OP_MODE_TRANSITION 25
 
 typedef struct {
     uint64_t schedule_count;

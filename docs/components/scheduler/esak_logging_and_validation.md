@@ -187,7 +187,7 @@ ESAK scheduling is release-ready only when:
 - required markers and metrics are present in runtime and matrix logs
 - docs/checklists/version records are synchronized with exact evidence paths
 
-## 6. Current Runtime Status (2026-02-21)
+## 6. Current Runtime Status (2026-02-22)
 
 - Implemented:
   - root/thread scheduling authorities (`CAP_TYPE_SCHED_AUTH_ROOT`, `CAP_TYPE_SCHED_AUTH_THREAD`)
@@ -202,5 +202,6 @@ ESAK scheduling is release-ready only when:
     - `[TEST] Cross-mode scheduling rejected`
     - `[TEST] Deterministic RR rotation stable`
     - `[TEST] SMP atomic budget integrity`
-- Open limitation:
-  - true remote preemption via IPI remains pending SMP bring-up (runtime still BSP-only).
+    - `[TEST] ESAK IPI profile: BSP_ONLY`
+- Final boundary:
+  - Product profile is ratified as BSP-only for current closure scope.

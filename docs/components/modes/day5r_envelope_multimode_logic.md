@@ -36,6 +36,18 @@ Every transition follows:
 - Add Paradigm probes for envelope transition rejection and acceptance visibility.
 - Keep ABI-compatible mode/syscall interfaces until explicit cutover.
 
+## Day 47 Closure Implementation
+- Kernel marker schema (implemented in `kernel/mode.c`):
+  - `[MODE_LEGACY_SHIM]` compatibility route marker
+  - `[ENV_COMPILE]`
+  - `[ENV_VERIFY]`
+  - `[ENV_APPLY]`
+  - `[ENV_ATTEST]`
+  - `[ENV_ROLLBACK]` (failure-only)
+- Paradigm runtime probes (implemented in `user/paradigm/main.c`):
+  - accepted transition probe marker: `PARADIGM: Envelope transition acceptance probe PASS.`
+  - rejected transition probe marker: `PARADIGM: Envelope transition rejection probe PASS.`
+
 ## Acceptance Gates
 - Build parity: `make -C user`, `make -C kernel`, `make -C kernel iso`.
 - Runtime parity: `make -C kernel verify_matrix` pass with no forbidden markers.

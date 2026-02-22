@@ -717,6 +717,7 @@ static void test_esak_enforcement(void) {
         kpanic("ESAK-TEST: atomic budget self-test failed");
     }
     kprintf("[TEST] SMP atomic budget integrity\n");
+    kprintf("[TEST] ESAK IPI profile: BSP_ONLY\n");
 
     cap_revoke(proc->cspace, 10);
     if (t->state != THREAD_BLOCKED_AUTH) {

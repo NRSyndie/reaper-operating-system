@@ -54,6 +54,10 @@ int sys_mode_query(void) {
     return do_gate_call(GATE_OP_MODE_QUERY, 0, 0, 0, 0, 0);
 }
 
+int sys_mode_transition(uint32_t target_mode) {
+    return do_gate_call(GATE_OP_MODE_TRANSITION, target_mode, 0, 0, 0, 0);
+}
+
 int sys_map(uint32_t parent_cap, uint32_t index, uint32_t child_cap, uint64_t flags) {
     return do_gate_call(GATE_OP_MAP, parent_cap, index, child_cap, flags, 1);
 }

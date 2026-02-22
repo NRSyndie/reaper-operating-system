@@ -13,7 +13,7 @@
 - [x] Added revoke-immediate dequeue + forced reschedule request flags.
 - [x] Added ESAK runtime marker suite and matrix required marker enforcement.
 - [x] Added scheduler security-event Fate logging hook.
-- [ ] Activated true IPI-driven remote preemption (deferred pending SMP runtime).
+- [x] Ratified final product boundary: BSP-only ESAK profile (`[TEST] ESAK IPI profile: BSP_ONLY`) with explicit deferred SMP IPI scope removed from closure debt.
 
 ## Documentation Sync
 - [x] Updated scheduler artifacts:

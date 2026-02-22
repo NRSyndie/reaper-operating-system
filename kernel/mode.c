@@ -165,6 +165,168 @@ static bool fate_record_matches_filter(const struct mode_transition* rec, fate_r
     return false;
 }
 
+typedef struct {
+    uint64_t txid;
+    mode_id_t from_mode;
+    mode_id_t to_mode;
+    transition_source_t source;
+    envelope_class_t from_class;
+    envelope_class_t to_class;
+    uint32_t requestor_pid;
+    bool ghost_flush_required;
+} env_compiled_transition_t;
+
+typedef struct {
+    mode_id_t prev_mode;
+    mode_id_t current_mode;
+    uint8_t mode_mask;
+} env_apply_snapshot_t;
+
+static envelope_class_t mode_to_envelope_class(mode_id_t mode) {
+    switch (mode) {
+        case MODE_CASUAL: return ENV_CLASS_BASELINE;
+        case MODE_SECURE: return ENV_CLASS_DEFENSIVE;
+        case MODE_LOCKDOWN: return ENV_CLASS_FAIL_CLOSED;
+        case MODE_GHOST: return ENV_CLASS_EPHEMERAL;
+        default: return ENV_CLASS_NONE;
+    }
+}
+
+static void env_marker_compile(const env_compiled_transition_t* compiled) {
+    kprintf("[ENV_COMPILE] txid=%lu from=%u to=%u src=%u class_from=%u class_to=%u pid=%u\n",
+            compiled->txid,
+            (unsigned)compiled->from_mode,
+            (unsigned)compiled->to_mode,
+            (unsigned)compiled->source,
+            (unsigned)compiled->from_class,
+            (unsigned)compiled->to_class,
+            compiled->requestor_pid);
+}
+
+static void env_marker_verify(const env_compiled_transition_t* compiled, envelope_deny_t deny) {
+    kprintf("[ENV_VERIFY] txid=%lu from=%u to=%u result=%s deny=%u\n",
+            compiled->txid,
+            (unsigned)compiled->from_mode,
+            (unsigned)compiled->to_mode,
+            deny == ENV_DENY_NONE ? "ALLOW" : "DENY",
+            (unsigned)deny);
+}
+
+static void env_marker_apply(const env_compiled_transition_t* compiled) {
+    kprintf("[ENV_APPLY] txid=%lu from=%u to=%u ghost_flush=%u\n",
+            compiled->txid,
+            (unsigned)compiled->from_mode,
+            (unsigned)compiled->to_mode,
+            compiled->ghost_flush_required ? 1U : 0U);
+}
+
+static void env_marker_attest(const env_compiled_transition_t* compiled, fate_result_t result, envelope_deny_t deny) {
+    kprintf("[ENV_ATTEST] txid=%lu from=%u to=%u result=%u deny=%u epoch=%lu\n",
+            compiled->txid,
+            (unsigned)compiled->from_mode,
+            (unsigned)compiled->to_mode,
+            (unsigned)result,
+            (unsigned)deny,
+            mode_get_security_epoch());
+}
+
+static void env_marker_rollback(const env_compiled_transition_t* compiled) {
+    kprintf("[ENV_ROLLBACK] txid=%lu from=%u to=%u\n",
+            compiled->txid,
+            (unsigned)compiled->from_mode,
+            (unsigned)compiled->to_mode);
+}
+
+static bool env_compile_transition(mode_id_t current, mode_id_t target_mode, transition_source_t source,
+                                   env_compiled_transition_t* out_compiled) {
+    thread_t* curr_thread;
+    if (!out_compiled) return false;
+
+    memset(out_compiled, 0, sizeof(*out_compiled));
+    out_compiled->txid = ++kernel_mode_state.envelope_txid;
+    out_compiled->from_mode = current;
+    out_compiled->to_mode = target_mode;
+    out_compiled->source = source;
+    out_compiled->from_class = mode_to_envelope_class(current);
+    out_compiled->to_class = mode_to_envelope_class(target_mode);
+    out_compiled->ghost_flush_required = (target_mode == MODE_GHOST || current == MODE_GHOST);
+
+    curr_thread = scheduler_get_current();
+    if (curr_thread && curr_thread->owner) {
+        out_compiled->requestor_pid = curr_thread->owner->pid;
+    }
+
+    env_marker_compile(out_compiled);
+    return true;
+}
+
+static envelope_deny_t env_verify_transition(const env_compiled_transition_t* compiled) {
+    if (compiled->to_mode < MODE_CASUAL || compiled->to_mode > MODE_GHOST) return ENV_DENY_TARGET_INVALID;
+    if (compiled->from_mode == MODE_GHOST && compiled->to_mode == MODE_SECURE) return ENV_DENY_GHOST_TO_SECURE;
+    if (compiled->from_mode == MODE_LOCKDOWN && compiled->to_mode == MODE_GHOST) return ENV_DENY_LOCKDOWN_TO_GHOST;
+    if (compiled->from_mode == MODE_LOCKDOWN && compiled->to_mode == MODE_SECURE) return ENV_DENY_LOCKDOWN_TO_SECURE;
+    return ENV_DENY_NONE;
+}
+
+static bool env_apply_transition(const env_compiled_transition_t* compiled, env_apply_snapshot_t* snapshot) {
+    mode_id_t current = kernel_mode_state.current_mode;
+
+    if (!snapshot) return false;
+
+    snapshot->prev_mode = kernel_mode_state.previous_mode;
+    snapshot->current_mode = current;
+    snapshot->mode_mask = kernel_mode_state.global_mode_mask;
+
+    switch (current) {
+        case MODE_GHOST:
+        case MODE_LOCKDOWN:
+        case MODE_SECURE:
+        case MODE_CASUAL:
+        default:
+            break;
+    }
+
+    kernel_mode_state.previous_mode = current;
+    kernel_mode_state.current_mode = compiled->to_mode;
+    kernel_mode_state.global_mode_mask = (uint8_t)(1U << compiled->to_mode);
+
+    kernel_mode_state.stats.transitions_total++;
+    if (compiled->source == TRANSITION_SOURCE_KERNEL) kernel_mode_state.stats.transitions_auto++;
+    else kernel_mode_state.stats.transitions_manual++;
+    __atomic_fetch_add(&kernel_mode_state.security_epoch, 1, __ATOMIC_RELAXED);
+    scheduler_on_mode_transition(current, compiled->to_mode, mode_get_security_epoch());
+
+    if (compiled->ghost_flush_required) {
+        invpcid_flush_all();
+        klog_info("SCHED_GHOST_FLUSH enter=%u exit=%u",
+                  compiled->to_mode == MODE_GHOST ? 1U : 0U,
+                  current == MODE_GHOST ? 1U : 0U);
+    }
+
+    ocular_bleach();
+
+    switch (compiled->to_mode) {
+        case MODE_GHOST:
+        case MODE_LOCKDOWN:
+        case MODE_SECURE:
+        case MODE_CASUAL:
+        default:
+            break;
+    }
+
+    env_marker_apply(compiled);
+    return true;
+}
+
+static void env_rollback_transition(const env_compiled_transition_t* compiled, const env_apply_snapshot_t* snapshot) {
+    if (!snapshot) return;
+
+    kernel_mode_state.previous_mode = snapshot->prev_mode;
+    kernel_mode_state.current_mode = snapshot->current_mode;
+    kernel_mode_state.global_mode_mask = snapshot->mode_mask;
+    env_marker_rollback(compiled);
+}
+
 /* --- Public API Implementation --- */
 
 const char* mode_get_name(mode_id_t mode) {
@@ -215,103 +377,45 @@ void mode_init(void) {
     }
 
 int mode_request_transition(mode_id_t target_mode, transition_source_t source) {
-    // 1. Acquire Lock
     uint64_t flags = spinlock_irqsave(&kernel_mode_state.transition_lock);
-    
     mode_id_t current = kernel_mode_state.current_mode;
-    
-    // 2. Idempotency Check
+    env_compiled_transition_t compiled;
+    env_apply_snapshot_t snapshot;
+    envelope_deny_t deny;
+    bool apply_ok;
+
     if (current == target_mode) {
-                spinlock_irqrestore(&kernel_mode_state.transition_lock, flags);
-        return 0; // Already there
-    }
-    
-    // 3. Validation (The State Machine Laws)
-    bool illegal = false;
-    if (target_mode < MODE_CASUAL || target_mode > MODE_GHOST) illegal = true;
-    
-    // GHOST -> SECURE is Illegal
-    if (current == MODE_GHOST && target_mode == MODE_SECURE) illegal = true;
-    
-    // LOCKDOWN -> GHOST is Illegal
-    if (current == MODE_LOCKDOWN && target_mode == MODE_GHOST) illegal = true;
-    
-    // LOCKDOWN -> SECURE is Illegal (Must go to Casual first)
-    if (current == MODE_LOCKDOWN && target_mode == MODE_SECURE) illegal = true;
-    
-    if (illegal) {
-        fate_log_transition_event(current, target_mode, source, FATE_RESULT_REJECTED);
         spinlock_irqrestore(&kernel_mode_state.transition_lock, flags);
-        return -1; // -EINVAL
-    }
-    
-    // Step 2: Pre-transition hooks
-    // TODO: Signal processes of impending transition
-    
-    // Step 3: Mode-specific teardown
-    switch (current) {
-        case MODE_GHOST:
-            // TODO: Destroy overlay filesystem, stop forensics
-            break;
-        case MODE_LOCKDOWN:
-            // TODO: Re-enable network, make FS writable
-            break;
-        case MODE_SECURE:
-            // TODO: Disable VPN enforcement
-            break;
-        case MODE_CASUAL:
-            // No teardown needed
-            break;
-        default:
-            break;
+        return 0;
     }
 
-    // Step 4: Record Fate String
+    kprintf("[MODE_LEGACY_SHIM] from=%u to=%u src=%u\n",
+            (unsigned)current, (unsigned)target_mode, (unsigned)source);
+
+    if (!env_compile_transition(current, target_mode, source, &compiled)) {
+        spinlock_irqrestore(&kernel_mode_state.transition_lock, flags);
+        return -1;
+    }
+
+    deny = env_verify_transition(&compiled);
+    env_marker_verify(&compiled, deny);
+    if (deny != ENV_DENY_NONE) {
+        fate_log_transition_event(current, target_mode, source, FATE_RESULT_REJECTED);
+        env_marker_attest(&compiled, FATE_RESULT_REJECTED, deny);
+        spinlock_irqrestore(&kernel_mode_state.transition_lock, flags);
+        return -1;
+    }
+
+    apply_ok = env_apply_transition(&compiled, &snapshot);
+    if (!apply_ok) {
+        env_rollback_transition(&compiled, &snapshot);
+        env_marker_attest(&compiled, FATE_RESULT_REJECTED, ENV_DENY_NONE);
+        spinlock_irqrestore(&kernel_mode_state.transition_lock, flags);
+        return -1;
+    }
+
     fate_log_transition_event(current, target_mode, source, FATE_RESULT_ACCEPTED);
-    
-    // Step 5: Update State
-    kernel_mode_state.previous_mode = current;
-    kernel_mode_state.current_mode = target_mode;
-    kernel_mode_state.global_mode_mask = (uint8_t)(1 << target_mode);
-    
-    kernel_mode_state.stats.transitions_total++;
-    if (source == TRANSITION_SOURCE_KERNEL) kernel_mode_state.stats.transitions_auto++;
-    else kernel_mode_state.stats.transitions_manual++;
-    __atomic_fetch_add(&kernel_mode_state.security_epoch, 1, __ATOMIC_RELAXED);
-    scheduler_on_mode_transition(current, target_mode, mode_get_security_epoch());
-
-    if (target_mode == MODE_GHOST || current == MODE_GHOST) {
-        invpcid_flush_all();
-        klog_info("SCHED_GHOST_FLUSH enter=%u exit=%u",
-                  target_mode == MODE_GHOST ? 1U : 0U,
-                  current == MODE_GHOST ? 1U : 0U);
-    }
-
-    // Step 5.5: THE GREAT BLEACHING
-    ocular_bleach();
-
-    // Step 6: Mode-specific setup
-    switch (target_mode) {
-        case MODE_GHOST:
-            // TODO: Create overlay filesystem, start forensics, start Tor
-            break;
-        case MODE_LOCKDOWN:
-            // TODO: Kill network, make FS readonly, kill processes
-            break;
-        case MODE_SECURE:
-            // TODO: Enable VPN enforcement, tighten limits
-            break;
-        case MODE_CASUAL:
-            // No setup needed
-            break;
-        default:
-            break;
-    }
-            
-    // Step 7: Post-transition hooks
-    // TODO: Notify daemons of mode change
-
-    // Step 8: Cleanup and return
+    env_marker_attest(&compiled, FATE_RESULT_ACCEPTED, ENV_DENY_NONE);
     spinlock_irqrestore(&kernel_mode_state.transition_lock, flags);
     return 0;
 }

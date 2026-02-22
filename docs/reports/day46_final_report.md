@@ -1,20 +1,25 @@
-# Day 46 Final Report: Final-Product Plan Re-Baseline Validation
+# Day 46 Final Report: Final-Product Envelope Re-Baseline Closure
 
 ## 1. Overview
-Day 46 validated the final-product planning re-baseline and synchronized core planning/roadmap/checklist artifacts after confirming clean build and runtime matrix status.
+Day 46 closed the kernel-side execution-envelope Phase 0/1 scaffolding by routing transitions through explicit compile/verify/apply/attest stages with rollback observability while preserving compatibility behavior.
 
 ## 2. What Was Implemented
-- Re-based Epoch III strategy to a final-product execution track in:
-  - `docs/development_log/epoch_three_plan.md`
-- Added Day 46 roadmap tracking and strategy update in:
-  - `docs/development_log/TODO.rst`
-- Extended release consistency gates for execution-envelope migration in:
-  - `docs/development_log/release_checklist.md`
+- Added transition envelope markers in `kernel/mode.c`:
+  - `[ENV_COMPILE]`
+  - `[ENV_VERIFY]`
+  - `[ENV_APPLY]`
+  - `[ENV_ATTEST]`
+  - `[ENV_ROLLBACK]` (failure-only)
+- Routed `mode_request_transition(...)` through compile/verify/apply/attest flow while keeping legacy entrypoint compatibility (`[MODE_LEGACY_SHIM]`).
+- Added userspace-callable mode transition gate operation:
+  - `GATE_OP_MODE_TRANSITION` in `shared/include/syscall.h`
+  - kernel handler path in `kernel/syscall.c`
+  - user wrapper in `user/lib/reaper.c`
 
 ## 3. Why It Was Added
-- To enforce a compatibility-first delivery model while architecture shifts continue.
-- To ensure each migration slice has explicit gates, rollback expectations, and closure criteria.
-- To reduce status drift between planning intent and release-time checklist behavior.
+- To make transition behavior deterministic and auditable without breaking existing mode/Fate consumers.
+- To establish a concrete envelope runtime path rather than leaving Day 46 as planning-only debt.
+- To make rollback visibility explicit for fail-closed transition handling.
 
 ## 4. Verification Results
 - [PASS] `make -C user`
@@ -24,7 +29,7 @@ Day 46 validated the final-product planning re-baseline and synchronized core pl
   - run 1: `kernel/serial_matrix_run1.log`
   - run 2: `kernel/serial_matrix_run2.log`
   - run 3: `kernel/serial_matrix_run3.log`
+- [PASS] Matrix required markers now include envelope stage evidence and legacy-shim routing.
 
 ## 5. Status Impact
-- No build or matrix regressions were detected after planning/documentation updates.
-- Day 46 remains in-progress for implementation follow-through on execution-envelope Phase 0/1.
+- Day 46 closure criteria are satisfied; execution-envelope kernel scaffolding is implemented and matrix-verified.

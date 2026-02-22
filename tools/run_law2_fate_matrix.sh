@@ -45,6 +45,8 @@ required_markers=(
     "PARADIGM: Hash Chain Integrity VERIFIED."
     "PARADIGM: Lattice Attunement SUCCESS."
     "PARADIGM: Real fault probe captured in Fate Strings."
+    "PARADIGM: Envelope transition acceptance probe PASS."
+    "PARADIGM: Envelope transition rejection probe PASS."
     "[TEST] Day 9 Void Gate redesign: SUCCESS."
     "[TEST] Syscall Gate ABI v2: SUCCESS."
     "[TEST] Syscall Gate validation invariants: SUCCESS."
@@ -58,11 +60,19 @@ required_markers=(
     "[TEST] Cross-mode scheduling rejected"
     "[TEST] Deterministic RR rotation stable"
     "[TEST] SMP atomic budget integrity"
+    "[TEST] ESAK IPI profile: BSP_ONLY"
+    "[MODE_LEGACY_SHIM]"
+    "[ENV_COMPILE]"
+    "[ENV_VERIFY]"
+    "[ENV_APPLY]"
+    "[ENV_ATTEST]"
 )
 
 forbidden_markers=(
     "PARADIGM: Failed to read Fate Strings."
     "PARADIGM: Fault ledger empty after real fault probe."
+    "PARADIGM: Envelope transition probes FAILED."
+    "[ENV_ROLLBACK]"
 )
 
 echo "[matrix] runs=${RUNS} timeout=${TIMEOUT_SECS}s iso=${ISO_PATH}"

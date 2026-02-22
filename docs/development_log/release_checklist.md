@@ -43,6 +43,7 @@ Use this checklist for every implementation day before declaring completion.
 - [ ] Transition pipeline path (`compile -> verify -> apply -> attest`) is used where scope requires it.
 - [ ] Compatibility shim behavior is documented for any retained legacy path.
 - [ ] Rollback path is defined and tested for the current migration slice.
+- [ ] Envelope runtime markers observed in serial logs (`[ENV_COMPILE]`, `[ENV_VERIFY]`, `[ENV_APPLY]`, `[ENV_ATTEST]`).
 - [ ] Kill criteria review completed (determinism, compatibility, operability).
 
 ## 7. Syscall Gate Final-Product Test Gates
@@ -66,4 +67,4 @@ Use this checklist for every implementation day before declaring completion.
 - [ ] Cross-mode scheduling rejection probe passes.
 - [ ] Scheduler metrics ABI (`SYS_SCHED_METRICS`) includes expanded ESAK counters.
 - [ ] Fate-compatible scheduler security events are observable (deny/revoke/budget paths).
-- [ ] BSP/SMP limitation note is explicit when IPI preemption is not yet active.
+- [ ] Product profile is explicit (`[TEST] ESAK IPI profile: BSP_ONLY` or validated SMP IPI activation evidence).

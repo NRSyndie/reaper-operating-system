@@ -71,7 +71,8 @@ enum {
     SYS_AUDIT = 20,
     SYS_SCHED_METRICS = 21,
     SYS_SCHED_AUTH_ROOT_MINT = 22,
-    SYS_SCHED_AUTH_THREAD_DERIVE = 23
+    SYS_SCHED_AUTH_THREAD_DERIVE = 23,
+    SYS_MODE_TRANSITION = 24
 };
 
 static int gate_op_to_legacy_sys(uint64_t op) {
@@ -100,6 +101,7 @@ static int gate_op_to_legacy_sys(uint64_t op) {
         case GATE_OP_SCHED_METRICS: return SYS_SCHED_METRICS;
         case GATE_OP_SCHED_AUTH_ROOT_MINT: return SYS_SCHED_AUTH_ROOT_MINT;
         case GATE_OP_SCHED_AUTH_THREAD_DERIVE: return SYS_SCHED_AUTH_THREAD_DERIVE;
+        case GATE_OP_MODE_TRANSITION: return SYS_MODE_TRANSITION;
         default: return -1;
     }
 }
@@ -578,6 +580,15 @@ uint64_t syscall_dispatcher(uint64_t num, uint64_t a0, uint64_t a1, uint64_t a2,
 
         case SYS_MODE_QUERY:
             ret = (uint64_t)mode_get_current();
+            break;
+
+        case SYS_MODE_TRANSITION:
+            if (a0 < MODE_CASUAL || a0 > MODE_GHOST) {
+                g_sys_metrics.invalid_rejects++;
+                ret = (uint64_t)-1;
+                break;
+            }
+            ret = (uint64_t)mode_request_transition((mode_id_t)a0, TRANSITION_SOURCE_USER);
             break;
 
         case SYS_CAP_INVOKE: {

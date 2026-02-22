@@ -71,6 +71,7 @@ struct mode_state {
 
     // Monotonic security epoch (Law 9 temporal scouring anchor)
     volatile uint64_t security_epoch;
+    uint64_t envelope_txid;
 };
 
 #endif /* REAPER_MODE_INTERNAL_H */

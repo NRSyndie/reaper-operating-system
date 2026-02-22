@@ -11,7 +11,7 @@
 - [x] Re-based Epoch III plan to final-product execution model
 - [x] Added Day 46 roadmap and current-phase tracking
 - [x] Added execution-envelope migration gates to release checklist
-- [ ] Deliver kernel-side execution-envelope Phase 0 scaffolding
+- [x] Delivered kernel-side execution-envelope Phase 0 scaffolding (`compile/verify/apply/attest` + rollback marker path)
 
 ## Documentation Sync
 - [x] Added day report: `docs/reports/day46_final_report.md`
