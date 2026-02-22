@@ -69,7 +69,9 @@ enum {
     SYS_OCULAR_SET = 18,
     SYS_LATTICE_DETACH = 19,
     SYS_AUDIT = 20,
-    SYS_SCHED_METRICS = 21
+    SYS_SCHED_METRICS = 21,
+    SYS_SCHED_AUTH_ROOT_MINT = 22,
+    SYS_SCHED_AUTH_THREAD_DERIVE = 23
 };
 
 static int gate_op_to_legacy_sys(uint64_t op) {
@@ -96,6 +98,8 @@ static int gate_op_to_legacy_sys(uint64_t op) {
         case GATE_OP_LATTICE_DETACH: return SYS_LATTICE_DETACH;
         case GATE_OP_AUDIT: return SYS_AUDIT;
         case GATE_OP_SCHED_METRICS: return SYS_SCHED_METRICS;
+        case GATE_OP_SCHED_AUTH_ROOT_MINT: return SYS_SCHED_AUTH_ROOT_MINT;
+        case GATE_OP_SCHED_AUTH_THREAD_DERIVE: return SYS_SCHED_AUTH_THREAD_DERIVE;
         default: return -1;
     }
 }
@@ -1020,11 +1024,70 @@ uint64_t syscall_dispatcher(uint64_t num, uint64_t a0, uint64_t a1, uint64_t a2,
             user_metrics.denied_enqueue = kernel_metrics.denied_enqueue;
             user_metrics.denied_wake = kernel_metrics.denied_wake;
             user_metrics.denied_dispatch = kernel_metrics.denied_dispatch;
+            user_metrics.denied_no_auth = kernel_metrics.denied_no_auth;
+            user_metrics.denied_mode_mismatch = kernel_metrics.denied_mode_mismatch;
+            user_metrics.budget_exhaustions = kernel_metrics.budget_exhaustions;
+            user_metrics.envelope_switches = kernel_metrics.envelope_switches;
+            user_metrics.active_security_epoch = kernel_metrics.active_security_epoch;
             user_metrics.cpu_id = kernel_metrics.cpu_id;
+            user_metrics.active_mode = kernel_metrics.active_mode;
             user_metrics.ready_depth = kernel_metrics.ready_depth;
             user_metrics.zombie_depth = kernel_metrics.zombie_depth;
 
             ret = copy_to_user(user_buf, &user_metrics, sizeof(user_metrics)) ? 0 : (uint64_t)-1;
+            break;
+        }
+
+        case SYS_SCHED_AUTH_ROOT_MINT: {
+            mode_id_t mode_binding = (mode_id_t)a0;
+            uint64_t max_total_budget = a1;
+            uint64_t refill_period_ticks = a2;
+            uint64_t max_accumulated = a3;
+            uint32_t dst_slot = (uint32_t)a4;
+
+            if (!owner || !owner->cspace) {
+                g_sys_metrics.ownerless_rejects++;
+                ret = (uint64_t)-1;
+                break;
+            }
+
+            /* Privileged minting: Paradigm/root authority process only. */
+            if (owner->pid != 1) {
+                g_sys_metrics.perm_rejects++;
+                ret = (uint64_t)-1;
+                break;
+            }
+
+            ret = (scheduler_mint_root_auth(owner,
+                                            dst_slot,
+                                            mode_binding,
+                                            max_total_budget,
+                                            refill_period_ticks,
+                                            max_accumulated) == 0) ? 0 : (uint64_t)-1;
+            break;
+        }
+
+        case SYS_SCHED_AUTH_THREAD_DERIVE: {
+            uint32_t root_slot = (uint32_t)a0;
+            uint32_t dst_slot = (uint32_t)a1;
+            uint32_t max_slice = (uint32_t)a2;
+            uint32_t weight = (uint32_t)a3;
+            uint64_t local_max_accumulated = a4;
+            thread_t* current = scheduler_get_current();
+
+            if (!owner || !owner->cspace || !current || current->owner != owner) {
+                g_sys_metrics.ownerless_rejects++;
+                ret = (uint64_t)-1;
+                break;
+            }
+
+            ret = (scheduler_derive_thread_auth(owner,
+                                                current,
+                                                root_slot,
+                                                dst_slot,
+                                                max_slice,
+                                                weight,
+                                                local_max_accumulated) == 0) ? 0 : (uint64_t)-1;
             break;
         }
             

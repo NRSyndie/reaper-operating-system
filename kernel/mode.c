@@ -138,6 +138,25 @@ void mode_log_lattice_event(uint32_t pid, uint64_t vaddr, uint32_t page_count,
     spinlock_irqrestore(&kernel_mode_state.transition_lock, flags);
 }
 
+void mode_log_sched_event(uint32_t pid, uint8_t event_code, uint32_t detail, fate_result_t result) {
+    uint64_t flags = spinlock_irqsave(&kernel_mode_state.transition_lock);
+    struct mode_transition record;
+
+    memset(&record, 0, sizeof(record));
+    record.timestamp_tsc = rdtsc();
+    record.record_type = FATE_RECORD_TRANSITION;
+    record.result_code = (uint8_t)result;
+    record.trigger_source = TRANSITION_SOURCE_KERNEL;
+    record.requestor_pid = pid;
+    record.from_mode = (uint8_t)kernel_mode_state.current_mode;
+    record.to_mode = (uint8_t)kernel_mode_state.current_mode;
+    record.fault_vector = event_code;
+    record.fault_error_code = detail;
+
+    fate_append_record(&record);
+    spinlock_irqrestore(&kernel_mode_state.transition_lock, flags);
+}
+
 static bool fate_record_matches_filter(const struct mode_transition* rec, fate_read_mode_t mode) {
     if (mode == FATE_READ_ALL) return true;
     if (mode == FATE_READ_TRANSITIONS) return rec->record_type == FATE_RECORD_TRANSITION;
@@ -259,6 +278,14 @@ int mode_request_transition(mode_id_t target_mode, transition_source_t source) {
     if (source == TRANSITION_SOURCE_KERNEL) kernel_mode_state.stats.transitions_auto++;
     else kernel_mode_state.stats.transitions_manual++;
     __atomic_fetch_add(&kernel_mode_state.security_epoch, 1, __ATOMIC_RELAXED);
+    scheduler_on_mode_transition(current, target_mode, mode_get_security_epoch());
+
+    if (target_mode == MODE_GHOST || current == MODE_GHOST) {
+        invpcid_flush_all();
+        klog_info("SCHED_GHOST_FLUSH enter=%u exit=%u",
+                  target_mode == MODE_GHOST ? 1U : 0U,
+                  current == MODE_GHOST ? 1U : 0U);
+    }
 
     // Step 5.5: THE GREAT BLEACHING
     ocular_bleach();

@@ -7,6 +7,7 @@
 #include "include/console.h"
 #include "include/scheduler.h"
 #include "include/klog.h"
+#include "include/mode.h"
 
 static uint32_t next_tid = 1;
 static slab_cache_t* thread_cache = NULL;
@@ -53,6 +54,17 @@ thread_t* thread_create(process_t* owner, void (*entry)(void)) {
     t->ticks_remaining = DEFAULT_QUANTUM;
     t->last_cpu = 0;
     t->sched_class = SCHED_CLASS_NORMAL;
+    t->remaining_thread_budget = DEFAULT_QUANTUM;
+    t->max_slice = DEFAULT_QUANTUM;
+    t->refill_period_ticks = DEFAULT_QUANTUM;
+    t->max_accumulated = SCHED_DEFAULT_MAX_ACCUMULATED;
+    t->last_thread_refill = 0;
+    t->sched_auth_slot = 0;
+    t->sched_weight = 1;
+    t->sched_tokens = 0;
+    t->sched_auth_mode = owner ? (uint8_t)owner->mode : (uint8_t)MODE_CASUAL;
+    t->sched_auth_required = (owner && owner->mode != MODE_KERNEL && owner->cspace != NULL);
+    t->sched_auth_valid = !t->sched_auth_required;
 
     owner->thread_count++;
 

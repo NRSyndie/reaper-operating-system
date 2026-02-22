@@ -102,6 +102,7 @@ void        mode_log_fault_event(uint8_t vector, uint64_t error_code, uint64_t r
                                  bool from_user);
 void        mode_log_lattice_event(uint32_t pid, uint64_t vaddr, uint32_t page_count,
                                    bool is_source, bool is_attach);
+void        mode_log_sched_event(uint32_t pid, uint8_t event_code, uint32_t detail, fate_result_t result);
 
 // PCID-Specialization for secure transitions/wipes
 void        mode_enter_secure_context(void);

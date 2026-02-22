@@ -171,6 +171,10 @@ Reaper-OS: Development Roadmap
    | Day 53 [DONE] | Syscall ABI v2 Gate              | Direct userspace invocation of internal syscall | Implemented single-entry `SYS_GATE_CALL` ABI with `GATE_OP_*` operations, |
    |               | Envelope Implementation          | numbering reduces boundary control and agility. | migrated userspace wrappers, and validated matrix/runtime markers.         |
    +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 54 [WIP]  | ESAK Scheduler Authority +       | Scheduler authority drift and SMP budget races | Added root/thread sched-auth capabilities, deterministic weighted RR tokens,   |
+   |               | Atomic Budget Hardening          | can violate ceiling/revocation invariants.     | atomic process-budget primitives, revoke-immediate dequeue path, expanded       |
+   |               |                                  |                                                | runtime markers, and matrix-gated ESAK probes (BSP-only IPI preempt deferred). |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
 
 
 
@@ -237,7 +241,7 @@ All foundational debts listed above have been successfully repaid... table:: Fut
 Project Estimates & Status
 --------------------------
 
-*   **Current Phase:** Epoch III, Day 53 (Day 5R multi-mode envelope logic bridge remains active; syscall ABI v2 gate envelope and supporting closure slices completed on February 18, 2026).
+*   **Current Phase:** Epoch III, Day 54 (ESAK scheduler authority + atomic budget hardening is active; core invariants are matrix-gated while full SMP IPI preemption remains deferred under BSP runtime on February 21, 2026).
 *   **Total Estimated Time:** 13 - 19 Weeks (~4 Months).
 *   **Strategy:** Reaper Envelope (Compatibility-First ABI + Hardware-Enforced Envelope Tiers).
 

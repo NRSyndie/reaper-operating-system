@@ -33,6 +33,16 @@ int sys_fate_read(void* buffer, int count, uint32_t audit_cap);
 int sys_fate_read_ex(void* buffer, int count, uint32_t audit_cap, uint32_t read_mode);
 int sys_audit(uint64_t target_pid, uint64_t flags, void* out_buf, uint64_t count);
 int sys_sched_metrics(gate_sched_metrics_t* out_metrics);
+int sys_sched_auth_root_mint(uint32_t mode_binding,
+                             uint64_t max_total_budget,
+                             uint64_t refill_period_ticks,
+                             uint64_t max_accumulated,
+                             uint32_t dst_slot);
+int sys_sched_auth_thread_derive(uint32_t root_slot,
+                                 uint32_t dst_slot,
+                                 uint32_t max_slice,
+                                 uint32_t weight,
+                                 uint64_t local_max_accumulated);
 
 /* String utils (implemented in string.c or similar) */
 void* memset(void* dest, int c, unsigned long n);

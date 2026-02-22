@@ -113,6 +113,28 @@ void genesis_bridge_spawn(void) {
     
     /* 7. Launch Paradigm */
     thread_t* paradigm_thread = thread_create(paradigm, paradigm_entry_stub);
+    if (!paradigm_thread) {
+        kpanic("GENESIS: Failed to create Paradigm thread.");
+    }
+
+    if (scheduler_mint_root_auth(paradigm,
+                                 5,
+                                 MODE_CASUAL,
+                                 (uint64_t)DEFAULT_QUANTUM * 32ULL,
+                                 (uint64_t)DEFAULT_QUANTUM,
+                                 (uint64_t)SCHED_DEFAULT_MAX_ACCUMULATED * 4ULL) != 0) {
+        kpanic("GENESIS: Failed to mint root scheduling authority.");
+    }
+
+    if (scheduler_derive_thread_auth(paradigm,
+                                     paradigm_thread,
+                                     5,
+                                     6,
+                                     DEFAULT_QUANTUM,
+                                     1,
+                                     SCHED_DEFAULT_MAX_ACCUMULATED) != 0) {
+        kpanic("GENESIS: Failed to derive thread scheduling authority.");
+    }
     scheduler_add(paradigm_thread);
 
     kprintf("[GENESIS] Paradigm soul forged and queued. C-Slot 1: GENESIS_CAP.\n");

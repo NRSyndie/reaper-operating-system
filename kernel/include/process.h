@@ -32,6 +32,12 @@ typedef struct {
     mode_id_t mode;      /* The Reality (Mode) this process belongs to */
     struct thread* waiter_thread; /* Optional waiter for SYS_WAIT */
     uint32_t exit_events; /* Count of peer exits observed by this process */
+    uint64_t remaining_process_budget;
+    uint64_t max_total_budget;
+    uint64_t refill_period_ticks;
+    uint64_t last_process_refill;
+    uint32_t sched_auth_root_slot;
+    bool     sched_auth_root_valid;
 
     lattice_attachment_t lattices[MAX_PROCESS_LATTICES];
 } process_t;

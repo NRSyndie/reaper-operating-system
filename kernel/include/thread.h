@@ -9,6 +9,8 @@ typedef enum {
     THREAD_READY,    /* In ready queue */
     THREAD_RUNNING,  /* Currently executing */
     THREAD_BLOCKED,  /* Waiting for event */
+    THREAD_BLOCKED_AUTH, /* Blocked due to missing/invalid scheduling authority */
+    THREAD_SUSPENDED_MODE, /* Blocked because its mode envelope is inactive */
     THREAD_ZOMBIE    /* Exited, awaiting cleanup */
 } thread_state_t;
 
@@ -38,6 +40,19 @@ typedef struct thread {
     uint32_t ticks_remaining;  /* Current quantum */
     uint32_t last_cpu;         /* Last CPU that executed this thread */
     uint8_t sched_class;       /* scheduler class (sched_class_t) */
+
+    /* Envelope scheduler budget contract */
+    uint64_t remaining_thread_budget;
+    uint64_t max_accumulated;
+    uint64_t last_thread_refill;
+    uint32_t max_slice;
+    uint32_t refill_period_ticks;
+    uint16_t sched_auth_slot;
+    uint8_t sched_weight;
+    uint8_t sched_tokens;
+    uint8_t sched_auth_mode;
+    bool sched_auth_required;
+    bool sched_auth_valid;
     
     struct thread* next;       /* Intrusive list pointer for scheduler */
     struct thread* wait_next;  /* Intrusive list pointer for IPC wait queues */

@@ -167,8 +167,59 @@ Record semantics:
 - `remote_enqueue`: enqueue/wake calls targeting a non-local CPU queue.
 - `migrations`: observed handoffs where previous and next thread `last_cpu` differ.
 - `denied_enqueue`, `denied_wake`, `denied_dispatch`: mode-policy denials at scheduler boundaries.
+- `denied_no_auth`: scheduling authority denials at enqueue/wake/dispatch.
+- `denied_mode_mismatch`: envelope-mode mismatch denials.
+- `budget_exhaustions`: thread/process budget exhaustion blocks.
+- `envelope_switches`: active envelope switch count on current CPU.
+- `active_security_epoch`: scheduler-observed security epoch.
 - `cpu_id`: current logical CPU id.
+- `active_mode`: scheduler active envelope mode.
 - `ready_depth`, `zombie_depth`: queue depths at snapshot time.
+
+## `SYS_SCHED_AUTH_ROOT_MINT` (22)
+
+ABI:
+
+- `a0`: mode binding (`MODE_CASUAL|MODE_SECURE|MODE_LOCKDOWN|MODE_GHOST`)
+- `a1`: `max_total_budget`
+- `a2`: `refill_period_ticks`
+- `a3`: `max_accumulated`
+- `a4`: destination capability slot
+
+Required invariants:
+
+- Caller must own privileged mint authority (currently PID 1 bootstrap rule).
+- Destination slot must be empty.
+- Mode binding must be a valid non-kernel user mode.
+- Budgets/period must be non-zero.
+- Minted object type is `CAP_TYPE_SCHED_AUTH_ROOT`.
+
+Failure behavior:
+
+- Return `-1` on privilege, slot, mode, or parameter violations.
+
+## `SYS_SCHED_AUTH_THREAD_DERIVE` (23)
+
+ABI:
+
+- `a0`: root auth slot (`CAP_TYPE_SCHED_AUTH_ROOT`)
+- `a1`: destination slot for derived thread auth
+- `a2`: `max_slice`
+- `a3`: `weight`
+- `a4`: `local_max_accumulated`
+
+Required invariants:
+
+- Root cap must exist and be `CAP_TYPE_SCHED_AUTH_ROOT`.
+- Derivation is reduction-only:
+  - `max_slice <= root.max_total_budget`
+  - `local_max_accumulated <= root.max_accumulated`
+- Derived thread auth inherits root mode binding.
+- Destination slot must be empty.
+
+Failure behavior:
+
+- Return `-1` on missing/invalid root, ceiling violation, slot conflict, or malformed arguments.
 
 ## Observability Counters
 

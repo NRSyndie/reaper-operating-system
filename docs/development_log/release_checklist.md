@@ -55,3 +55,15 @@ Use this checklist for every implementation day before declaring completion.
 - [ ] Syscall security regression tests passed.
 - [ ] Syscall performance budget checks passed.
 - [ ] Required syscall gate runtime markers present in serial logs.
+
+## 8. ESAK Scheduler Hardening Gates
+- [ ] `CAP_TYPE_SCHED_AUTH_ROOT` and `CAP_TYPE_SCHED_AUTH_THREAD` contracts validated.
+- [ ] No ambient non-system enqueue path remains.
+- [ ] Root/thread ceiling derivation probes pass.
+- [ ] Deterministic weighted RR probe passes.
+- [ ] Atomic process-budget integrity probe passes.
+- [ ] Revocation immediate dequeue probe passes.
+- [ ] Cross-mode scheduling rejection probe passes.
+- [ ] Scheduler metrics ABI (`SYS_SCHED_METRICS`) includes expanded ESAK counters.
+- [ ] Fate-compatible scheduler security events are observable (deny/revoke/budget paths).
+- [ ] BSP/SMP limitation note is explicit when IPI preemption is not yet active.

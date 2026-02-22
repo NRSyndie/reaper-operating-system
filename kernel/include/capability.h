@@ -27,6 +27,8 @@ typedef enum {
     CAP_TYPE_PAGETABLE,/* Page Table Authority (PML4, PDPT, PD, PT) */
     CAP_TYPE_LATTICE,  /* Shared Memory Lattice Authority */
     CAP_TYPE_AUDITOR,  /* Fate String Auditing Authority */
+    CAP_TYPE_SCHED_AUTH_ROOT,   /* Process scheduling root authority */
+    CAP_TYPE_SCHED_AUTH_THREAD, /* Thread scheduling derived authority */
     CAP_MAX_TYPES
 } cap_type_t;
 

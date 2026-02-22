@@ -151,6 +151,12 @@ extern struct limine_hhdm_request hhdm_request;
 // Kernel Features
 struct kernel_features_t kernel_features;
 
+static void esak_test_entry(void) {
+    while (1) {
+        thread_yield();
+    }
+}
+
 static void test_slab_allocator(void) {
     kprintf("[TEST] Allocator redesign validation...\n");
 
@@ -626,6 +632,99 @@ static void test_deep_derivation(void) {
     kprintf("[TEST] Deep Derivation: SUCCESS.\n");
 }
 
+static void test_esak_enforcement(void) {
+    uint64_t pml4 = vmm_fork_pml4();
+    uint16_t pcid = pcid_alloc(MODE_CASUAL);
+    cnode_t* cspace = cnode_create();
+    process_t* proc = process_create(pml4, pcid, cspace, MODE_CASUAL);
+    thread_t* t;
+    int rc;
+
+    if (!proc) {
+        kpanic("ESAK-TEST: process create failed");
+    }
+
+    t = thread_create(proc, esak_test_entry);
+    if (!t) {
+        kpanic("ESAK-TEST: thread create failed");
+    }
+
+    /* No derived auth yet: enqueue must fail-closed. */
+    scheduler_add(t);
+    if (t->state != THREAD_BLOCKED_AUTH) {
+        kpanic("ESAK-TEST: no-authority thread was runnable");
+    }
+    kprintf("[TEST] No authority -> no execution\n");
+
+    rc = scheduler_mint_root_auth(proc, 10, MODE_CASUAL, 5, 5, 20);
+    if (rc != 0) {
+        kpanic("ESAK-TEST: root mint failed");
+    }
+
+    /* Must fail: child max_slice exceeds root max_total_budget. */
+    rc = scheduler_derive_thread_auth(proc, t, 10, 11, 10, 1, 10);
+    if (rc == 0) {
+        kpanic("ESAK-TEST: root ceiling violation accepted");
+    }
+    kprintf("[TEST] Root ceiling enforced\n");
+
+    rc = scheduler_derive_thread_auth(proc, t, 10, 12, 3, 1, 10);
+    if (rc != 0) {
+        kpanic("ESAK-TEST: valid thread auth derive failed");
+    }
+
+    scheduler_add(t);
+    if (t->state != THREAD_READY) {
+        kpanic("ESAK-TEST: authorized thread failed to become ready");
+    }
+
+    /*
+     * Thread explosion prevention proxy:
+     * with zero process budget, additional authorized threads must not become runnable.
+     */
+    thread_t* t2 = thread_create(proc, esak_test_entry);
+    if (!t2) kpanic("ESAK-TEST: t2 create failed");
+    t2->sched_auth_required = true;
+    t2->sched_auth_valid = false;
+    scheduler_add(t2);
+    if (t2->state != THREAD_BLOCKED_AUTH) {
+        kpanic("ESAK-TEST: thread explosion prevention failed");
+    }
+    kprintf("[TEST] Thread explosion prevented\n");
+
+    /* Cross-mode scheduling rejection. */
+    process_t* secure_proc = process_create(vmm_fork_pml4(), pcid_alloc(MODE_SECURE), cnode_create(), MODE_SECURE);
+    thread_t* ts = thread_create(secure_proc, esak_test_entry);
+    if (!secure_proc || !ts) kpanic("ESAK-TEST: secure proc/thread create failed");
+    if (scheduler_mint_root_auth(secure_proc, 20, MODE_CASUAL, 10, 10, 20) != 0) {
+        kpanic("ESAK-TEST: secure root mint failed");
+    }
+    if (scheduler_derive_thread_auth(secure_proc, ts, 20, 21, 2, 1, 5) != 0) {
+        kpanic("ESAK-TEST: secure derive failed");
+    }
+    scheduler_add(ts);
+    if (ts->state == THREAD_READY || ts->state == THREAD_RUNNING) {
+        kpanic("ESAK-TEST: cross-mode scheduling was not rejected");
+    }
+    kprintf("[TEST] Cross-mode scheduling rejected\n");
+
+    if (!scheduler_self_test_deterministic_rr()) {
+        kpanic("ESAK-TEST: deterministic RR self-test failed");
+    }
+    kprintf("[TEST] Deterministic RR rotation stable\n");
+
+    if (!scheduler_self_test_atomic_budget()) {
+        kpanic("ESAK-TEST: atomic budget self-test failed");
+    }
+    kprintf("[TEST] SMP atomic budget integrity\n");
+
+    cap_revoke(proc->cspace, 10);
+    if (t->state != THREAD_BLOCKED_AUTH) {
+        kpanic("ESAK-TEST: revocation did not immediately dequeue thread");
+    }
+    kprintf("[TEST] Revocation immediate dequeue\n");
+}
+
 void kernel_main(void) {
     console_init();
     klog_new_chain();
@@ -672,6 +771,7 @@ void kernel_main(void) {
 
     // Day 10: Process Substrate
     scheduler_init();
+    test_esak_enforcement();
     timer_init(100); // 100 Hz Heartbeat
 
     // Day 13: The Invisible Context

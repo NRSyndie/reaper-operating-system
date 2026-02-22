@@ -65,3 +65,35 @@ Day 10 scheduler foundations were reworked for final-product alignment across vi
 
 - Full SMP dispatch with active multi-core runtime and IPI-driven remote preemption remains a follow-on activation step.
 - Full interrupt-frame-based user-context preservation model is partially hardened; current path scrubs volatile lanes but still uses legacy switch ABI shape.
+
+---
+
+## 7. ESAK Hardening Addendum (Saturday, February 21, 2026)
+
+Day 10 scheduler redesign advanced into ESAK authority/budget enforcement:
+
+- Added root/thread scheduling authority capability split:
+  - `CAP_TYPE_SCHED_AUTH_ROOT`
+  - `CAP_TYPE_SCHED_AUTH_THREAD`
+- Added deterministic weighted RR token rotation for envelope dispatch.
+- Added atomic process-budget consume/refill primitives and dual budget enforcement.
+- Added revoke-immediate dequeue path and forced-reschedule request flags.
+- Added expanded runtime verification markers:
+  - `[TEST] No authority -> no execution`
+  - `[TEST] Root ceiling enforced`
+  - `[TEST] Thread explosion prevented`
+  - `[TEST] Revocation immediate dequeue`
+  - `[TEST] Cross-mode scheduling rejected`
+  - `[TEST] Deterministic RR rotation stable`
+  - `[TEST] SMP atomic budget integrity`
+
+### 7.1 Runtime Revalidation
+
+- `make -C user`: PASS
+- `make -C kernel`: PASS
+- `make -C kernel iso`: PASS
+- `./tools/run_law2_fate_matrix.sh --runs 1 --timeout 35 --iso kernel/reaper-os.iso --out-dir kernel`: PASS
+
+### 7.2 Remaining Scope
+
+- Runtime remains BSP-only (`cpu_get_id() == 0` scaffolding); true IPI remote preemption is deferred until SMP activation.

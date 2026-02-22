@@ -855,3 +855,33 @@
         *   `[TEST] Syscall Gate SMP isolation: SUCCESS.`
         *   `[TEST] Syscall Gate performance budget: SUCCESS.`
         *   `PARADIGM: Boundary probes passed (safe failures confirmed).`
+
+### Epoch III, Day 54: ESAK Scheduler Authority + Atomic Budget Hardening
+*   **What was changed:**
+    *   Added scheduling authority capability split:
+        *   `CAP_TYPE_SCHED_AUTH_ROOT`
+        *   `CAP_TYPE_SCHED_AUTH_THREAD`
+    *   Added ESAK scheduler APIs for authority mint/derive and immediate revocation handling.
+    *   Added deterministic weighted RR token rotation in scheduler selection flow.
+    *   Added atomic process-budget consume/refill primitives with dual budget enforcement at dispatch.
+    *   Added revoke-driven immediate dequeue and forced-reschedule request flags.
+    *   Expanded runtime marker coverage and matrix required markers for ESAK invariants.
+    *   Added/updated artifacts:
+        *   `docs/reports/day54_final_report.md`
+        *   `docs/development_log/day54_checklist.md`
+*   **Why it was changed:**
+    *   To lock scheduler authority, budget ceilings, and revocation behavior behind deterministic, auditable contracts.
+    *   To close non-atomic budget/race exposure before SMP activation.
+*   **Test Results:**
+    *   [PASS] `make -C user`
+    *   [PASS] `make -C kernel`
+    *   [PASS] `make -C kernel iso`
+    *   [PASS] `./tools/run_law2_fate_matrix.sh --runs 1 --timeout 35 --iso kernel/reaper-os.iso --out-dir kernel`
+    *   [PASS] Matrix serial markers include:
+        *   `[TEST] No authority -> no execution`
+        *   `[TEST] Root ceiling enforced`
+        *   `[TEST] Thread explosion prevented`
+        *   `[TEST] Revocation immediate dequeue`
+        *   `[TEST] Cross-mode scheduling rejected`
+        *   `[TEST] Deterministic RR rotation stable`
+        *   `[TEST] SMP atomic budget integrity`

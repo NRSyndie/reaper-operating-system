@@ -5,6 +5,8 @@
 #include "mode.h"
 #include "ipc.h"
 #include "pmm.h"
+#include "scheduler.h"
+#include "kmalloc.h"
 
 extern void lattice_destroy(lattice_t* lattice);
 
@@ -236,6 +238,10 @@ void cap_identity_free(cap_identity_t* ident) {
         case CAP_TYPE_PCID:
         case CAP_TYPE_PAGETABLE:
         case CAP_TYPE_AUDITOR:
+        case CAP_TYPE_SCHED_AUTH_ROOT:
+        case CAP_TYPE_SCHED_AUTH_THREAD:
+            kfree((void*)ident->object_ptr);
+            break;
         case CAP_TYPE_GENESIS:
         default:
             break;
@@ -402,6 +408,7 @@ int cap_mint(cnode_t* root, uint32_t src_cptr, uint32_t dst_cptr, uint16_t new_r
 }
 
 static void cap_revoke_tree(cap_identity_t* root, uint64_t epoch) {
+    sched_auth_obj_t* auth;
     if (!root) return;
 
     cap_identity_t* child = root->first_child;
@@ -411,6 +418,17 @@ static void cap_revoke_tree(cap_identity_t* root, uint64_t epoch) {
     }
 
     __atomic_store_n(&root->revocation_epoch, epoch, __ATOMIC_RELEASE);
+    if (root->type == CAP_TYPE_SCHED_AUTH_ROOT || root->type == CAP_TYPE_SCHED_AUTH_THREAD) {
+        auth = (sched_auth_obj_t*)root->object_ptr;
+        if (auth && auth->magic == 0x53415554u) {
+            if (root->type == CAP_TYPE_SCHED_AUTH_ROOT && auth->owner_process) {
+                scheduler_revoke_process_immediate(auth->owner_process);
+            }
+            if (root->type == CAP_TYPE_SCHED_AUTH_THREAD && auth->bound_thread) {
+                scheduler_revoke_thread_immediate(auth->bound_thread);
+            }
+        }
+    }
 }
 
 void cap_revoke(cnode_t* root, uint32_t cptr) {

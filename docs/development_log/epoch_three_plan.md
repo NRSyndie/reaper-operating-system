@@ -81,3 +81,20 @@ Epoch III now runs as a final-product delivery program: preserve ABI/runtime sta
   - `docs/components/memory/vmm_region_contracts.md` (region-contract compile/apply bridge)
 - Day 47 Day 5R migration artifact:
   - `docs/components/modes/day5r_envelope_multimode_logic.md` (multi-mode logic mapped to execution-envelope contract)
+- Day 54 ESAK scheduler hardening artifacts:
+  - `docs/components/scheduler/esak_logging_and_validation.md`
+  - `docs/components/scheduler/scheduler_lock_order.md`
+  - `docs/components/syscalls/syscall_contracts.md` (sched-auth gate ops + metrics)
+
+## 9) Current Status Checkpoint (2026-02-21)
+
+- Active slice: Epoch III Day 54 (ESAK scheduler authority and atomic budget hardening).
+- Completed in current slice:
+  - root/thread scheduling authority capability model
+  - deterministic weighted RR token rotation
+  - atomic process budget consume/refill contract
+  - revoke-immediate dequeue path with forced-reschedule flags
+  - expanded runtime markers and matrix gate assertions
+- Deferred limit:
+  - full SMP IPI-driven remote preemption remains pending multi-core runtime activation
+    (current runtime is BSP-only scaffolding).

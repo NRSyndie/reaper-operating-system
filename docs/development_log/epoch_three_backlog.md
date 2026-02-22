@@ -32,9 +32,12 @@ Execute the approved Epoch III strategy with security-first sequencing, measurab
 ---
 
 ## Workstream 2 — Deterministic Performance (Priority 1)
-### 2.1 Mode-weighted quantum (guardrailed)
-- Implement weighted scheduling policy with deterministic fallback.
-- Add fairness/starvation probe cases.
+### 2.1 ESAK deterministic scheduler hardening
+- [IN PROGRESS] Implement root/thread scheduling authority model.
+- [IN PROGRESS] Enforce atomic process-budget consume/refill invariants.
+- [IN PROGRESS] Deterministic weighted RR with fairness probes.
+- [TODO] Add starvation upper-bound marker under mixed workload.
+- [TODO] Activate true SMP IPI preemption path once multi-core runtime is enabled.
 
 **Acceptance gate**
 - Scheduler probes pass across mixed workload scenarios.
@@ -70,7 +73,7 @@ Execute the approved Epoch III strategy with security-first sequencing, measurab
 ## Suggested Execution Milestones
 1. **M1 (Security Contract Freeze):** `SYS_AUDIT` contract + zero-residue policy finalized.
 2. **M2 (Security Runtime Validation):** new probes integrated; matrix expanded for security invariants.
-3. **M3 (Deterministic Scheduler):** weighted quantum merged with fairness and regression evidence.
+3. **M3 (Deterministic Scheduler):** ESAK authority + weighted RR + atomic budget merged with fairness and regression evidence.
 4. **M4 (Vision Bridge):** reality-aware bootinfo compatibility bridge validated.
 5. **M5 (Daemon Partition Plan):** authority surfaces documented and approved for implementation phase.
 

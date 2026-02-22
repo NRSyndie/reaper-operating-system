@@ -32,6 +32,12 @@ process_t* process_create(uint64_t pml4, uint16_t pcid, cnode_t* cspace, mode_id
     p->mode = mode; // Initialize new mode field
     p->waiter_thread = NULL;
     p->exit_events = 0;
+    p->remaining_process_budget = 0;
+    p->max_total_budget = 0;
+    p->refill_period_ticks = 0;
+    p->last_process_refill = 0;
+    p->sched_auth_root_slot = 0;
+    p->sched_auth_root_valid = false;
 
     // Zero out lattice attachments
     for (int i = 0; i < MAX_PROCESS_LATTICES; i++) {

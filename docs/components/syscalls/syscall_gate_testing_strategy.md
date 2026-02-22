@@ -2,6 +2,10 @@
 
 This strategy defines the minimum required test coverage for the syscall gate redesign and ABI freeze.
 
+Related scheduler validation baseline:
+
+- `docs/components/scheduler/esak_logging_and_validation.md`
+
 ## 1. Scope
 
 The strategy covers:
@@ -114,6 +118,13 @@ Serial logs must contain, at minimum:
 - `[TEST] Syscall Gate security probes: SUCCESS.`
 - `[TEST] Syscall Gate SMP isolation: SUCCESS.`
 - `[TEST] Syscall Gate performance budget: SUCCESS.`
+- `[TEST] No authority -> no execution`
+- `[TEST] Root ceiling enforced`
+- `[TEST] Thread explosion prevented`
+- `[TEST] Revocation immediate dequeue`
+- `[TEST] Cross-mode scheduling rejected`
+- `[TEST] Deterministic RR rotation stable`
+- `[TEST] SMP atomic budget integrity`
 
 ## 5. Final-Product Exit Criteria
 
@@ -124,3 +135,4 @@ The syscall gate is release-ready only when:
 - required runtime markers are present and forbidden markers are absent
 - docs/version logs are synchronized with exact commands and evidence paths
 - no unresolved syscall-gate TODOs remain in code or release checklists
+- ESAK scheduler authority/runtime markers are present in matrix logs for current release slice

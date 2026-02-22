@@ -33,6 +33,8 @@
 #define GATE_OP_LATTICE_DETACH  20
 #define GATE_OP_AUDIT           21
 #define GATE_OP_SCHED_METRICS   22
+#define GATE_OP_SCHED_AUTH_ROOT_MINT   23
+#define GATE_OP_SCHED_AUTH_THREAD_DERIVE 24
 
 typedef struct {
     uint64_t schedule_count;
@@ -42,7 +44,13 @@ typedef struct {
     uint64_t denied_enqueue;
     uint64_t denied_wake;
     uint64_t denied_dispatch;
+    uint64_t denied_no_auth;
+    uint64_t denied_mode_mismatch;
+    uint64_t budget_exhaustions;
+    uint64_t envelope_switches;
+    uint64_t active_security_epoch;
     uint32_t cpu_id;
+    uint32_t active_mode;
     uint32_t ready_depth;
     uint32_t zombie_depth;
 } gate_sched_metrics_t;

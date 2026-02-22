@@ -122,3 +122,29 @@ int sys_sched_metrics(gate_sched_metrics_t* out_metrics) {
     if (!out_metrics) return -1;
     return do_gate_call(GATE_OP_SCHED_METRICS, (uint64_t)out_metrics, sizeof(*out_metrics), 0, 0, 0);
 }
+
+int sys_sched_auth_root_mint(uint32_t mode_binding,
+                             uint64_t max_total_budget,
+                             uint64_t refill_period_ticks,
+                             uint64_t max_accumulated,
+                             uint32_t dst_slot) {
+    return do_gate_call(GATE_OP_SCHED_AUTH_ROOT_MINT,
+                        mode_binding,
+                        max_total_budget,
+                        refill_period_ticks,
+                        max_accumulated,
+                        dst_slot);
+}
+
+int sys_sched_auth_thread_derive(uint32_t root_slot,
+                                 uint32_t dst_slot,
+                                 uint32_t max_slice,
+                                 uint32_t weight,
+                                 uint64_t local_max_accumulated) {
+    return do_gate_call(GATE_OP_SCHED_AUTH_THREAD_DERIVE,
+                        root_slot,
+                        dst_slot,
+                        max_slice,
+                        weight,
+                        local_max_accumulated);
+}

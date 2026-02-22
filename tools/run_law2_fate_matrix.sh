@@ -51,6 +51,13 @@ required_markers=(
     "[TEST] Syscall Gate security probes: SUCCESS."
     "[TEST] Syscall Gate SMP isolation: SUCCESS."
     "[TEST] Syscall Gate performance budget: SUCCESS."
+    "[TEST] No authority -> no execution"
+    "[TEST] Root ceiling enforced"
+    "[TEST] Thread explosion prevented"
+    "[TEST] Revocation immediate dequeue"
+    "[TEST] Cross-mode scheduling rejected"
+    "[TEST] Deterministic RR rotation stable"
+    "[TEST] SMP atomic budget integrity"
 )
 
 forbidden_markers=(
