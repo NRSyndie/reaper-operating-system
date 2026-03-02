@@ -1243,3 +1243,87 @@
     *   [PASS] `make -C kernel iso`
     *   [PASS] `make -C kernel verify_matrix` (3/3)
     *   [PASS] `./tools/run_day24_closure_suite.sh --runs 5 --timeout 35 --iso kernel/reaper-os.iso --out-dir kernel` (5/5)
+
+### Epoch III, Day 69: Day 25 Closure Ratification
+*   **What was changed:**
+    *   Hardened Day 25 `vmm_switch` fail-closed semantics:
+        *   panic on invalid PCID
+        *   panic on invalid mode
+        *   panic on unaligned PML4 CR3 input
+    *   Added Day 25 PCID switch observability counters:
+        *   switch count
+        *   forced-flush count
+        *   reject count
+    *   Added deterministic TLB scrub on `pcid_free(...)` before bitmap release.
+    *   Integrated secure transition context usage in mode-apply pipeline:
+        *   `mode_enter_secure_context()` before transition-critical flush/bleach operations
+        *   `mode_exit_secure_context()` after completion
+    *   Added deterministic Day 25 closure markers in kernel self-tests:
+        *   `[TEST] Day 25 PCID Partition Contract: SUCCESS.`
+        *   `[TEST] Day 25 TLB Scrub Contract: SUCCESS.`
+        *   `[TEST] Day 25 Secure Context Contract: SUCCESS.`
+    *   Added explicit Day 25 fail marker path:
+        *   `[DAY25-FAIL]`
+    *   Extended matrix required/forbidden marker gates for Day 25.
+    *   Added repeat-run Day 25 closure suite:
+        *   `tools/run_day25_closure_suite.sh`
+    *   Added Day 25 closure contract artifact:
+        *   `docs/components/day25/day25_closure_contract.md`
+*   **Why it was changed:**
+    *   To convert Day 25 from historical/manual validation into enforceable final-product closure gates.
+    *   To eliminate fail-open switch behavior and enforce deterministic PCID recycle hygiene.
+*   **Test Results:**
+    *   [PASS] `make -C user`
+    *   [PASS] `make -C kernel`
+    *   [PASS] `make -C kernel iso`
+    *   [PASS] `make -C kernel verify_matrix` (3/3)
+    *   [PASS] `./tools/run_day25_closure_suite.sh --runs 5 --timeout 35 --iso kernel/reaper-os.iso --out-dir kernel` (5/5)
+
+### Epoch III, Day 70: Day 26 Closure Ratification
+*   **What was changed:**
+    *   Added deterministic Day 26 closure markers in Paradigm Law 6 runtime probes:
+        *   `[TEST] Day 26 Prismatic Substrate Contract: SUCCESS.`
+        *   `[TEST] Day 26 Void Wall Contract: SUCCESS.`
+        *   `[TEST] Day 26 Attunement Contract: SUCCESS.`
+    *   Added explicit Day 26 fail marker path:
+        *   `[DAY26-FAIL]`
+    *   Hardened `lattice_handle_fault(...)` in kernel:
+        *   attach window overflow-safe range checks
+        *   fault page-index bounds checks against attachment and lattice page counts
+    *   Extended matrix required/forbidden marker gates for Day 26.
+    *   Added repeat-run Day 26 closure suite:
+        *   `tools/run_day26_closure_suite.sh`
+    *   Added Day 26 closure contract artifact:
+        *   `docs/components/day26/day26_closure_contract.md`
+*   **Why it was changed:**
+    *   To convert Day 26 Law 6 behavior from historical/manual validation into enforceable final-product closure gates.
+    *   To ensure Void Wall and attunement behavior remains deterministic and release-blocking on regressions.
+*   **Test Results:**
+    *   [PASS] `make -C user`
+    *   [PASS] `make -C kernel`
+    *   [PASS] `make -C kernel iso`
+    *   [PASS] `make -C kernel verify_matrix` (3/3)
+    *   [PASS] `./tools/run_day26_closure_suite.sh --runs 5 --timeout 35 --iso kernel/reaper-os.iso --out-dir kernel` (5/5)
+
+### Epoch III, Day 71: Day 27 Closure Ratification
+*   **What was changed:**
+    *   Added deterministic Day 27 closure markers in Paradigm boundary/strict probe flow:
+        *   `[TEST] Day 27 Boundary Hardening Contract: SUCCESS.`
+        *   `[TEST] Day 27 Strict Foundation Contract: SUCCESS.`
+        *   `[TEST] Day 27 Syscall Rejection Contract: SUCCESS.`
+    *   Added explicit Day 27 fail marker path:
+        *   `[DAY27-FAIL]`
+    *   Extended matrix required/forbidden marker gates for Day 27.
+    *   Added repeat-run Day 27 closure suite:
+        *   `tools/run_day27_closure_suite.sh`
+    *   Added Day 27 closure contract artifact:
+        *   `docs/components/day27/day27_closure_contract.md`
+*   **Why it was changed:**
+    *   To convert Day 27 boundary-hardening/strict-foundation behavior from generic runtime logs into explicit final-product closure gates.
+    *   To make Day 27 boundary and strict negative-path regressions release-blocking.
+*   **Test Results:**
+    *   [PASS] `make -C user`
+    *   [PASS] `make -C kernel`
+    *   [PASS] `make -C kernel iso`
+    *   [PASS] `make -C kernel verify_matrix` (3/3)
+    *   [PASS] `./tools/run_day27_closure_suite.sh --runs 5 --timeout 35 --iso kernel/reaper-os.iso --out-dir kernel` (5/5)

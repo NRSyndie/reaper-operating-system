@@ -1,57 +1,58 @@
 # PCID Subsystem API
 
-The PCID Subsystem provides the hardware-accelerated context switching interface.
+The PCID subsystem provides mode-aware hardware context allocation and fail-closed CR3 switching for Reality isolation.
 
 ## 1. Allocator API
+
 Defined in `kernel/include/pcid.h`.
 
 ### `void pcid_init(void)`
-Initializes the bitmap allocator. Reserves PCID 0 (Kernel) and PCID 4095 (Overflow).
+Initializes mode-partitioned allocator state and metrics.
 
-### `uint16_t pcid_alloc(void)`
-Allocates the next available PCID.
-- **Returns:** A unique ID (1-4094) or `PCID_ERROR` (0xFFFF).
+### `uint16_t pcid_alloc(mode_id_t mode)`
+Allocates a PCID inside the caller mode range.
+- Returns a mode-scoped PCID on success.
+- Returns `PCID_ERROR` on exhaustion/invalid mode.
 
-### `void pcid_free(uint16_t pcid)`
-Releases a PCID back to the pool.
-- **Safety:** Panics if attempting to free PCID 0.
+### `void pcid_free(uint16_t pcid, mode_id_t mode)`
+Releases a PCID back to the mode allocator.
+- Validates range ownership.
+- Performs `INVPCID` single-context scrub before reuse.
 
-## 2. VMM PCID Interface
+### `uint16_t pcid_get_mode_base(mode_id_t mode)`
+Returns base PCID for the mode.
+
+### `uint16_t pcid_get_mode_count(mode_id_t mode)`
+Returns allocatable PCID count for the mode.
+
+## 2. VMM Interface
+
 Defined in `kernel/include/vmm.h`.
 
-### `void vmm_switch(uint64_t pml4_phys, uint16_t pcid)`
-The core context switch mechanism.
-- **pml4_phys:** Physical address of the new page table.
-- **pcid:** The ID associated with this address space.
-- **Behavior:** Automatically sets the `NOFLUSH` bit to preserve TLB if hardware support is detected.
+### `void vmm_switch(uint64_t pml4_phys, uint16_t pcid, mode_id_t mode)`
+Fail-closed CR3 switch primitive.
+- Panics on invalid PCID, mode, or unaligned PML4 address.
+- Enforces mode->PCID range invariants.
+- Preserves TLB (`NOFLUSH=1`) except mandatory flush scenarios (e.g., GHOST).
+
+### `uint16_t vmm_get_current_pcid(void)`
+Returns active CR3 PCID bits.
 
 ### `void invpcid_flush_single(uint16_t pcid, uint64_t addr)`
-Invalidates a single virtual address mapping for a specific PCID.
+Flushes a single VA for one PCID.
 
 ### `void invpcid_flush_context(uint16_t pcid)`
-Invalidates all mappings for a specific PCID.
+Flushes all non-global entries for one PCID.
 
-## 3. Hardware Feature Queries
-Defined in `kernel/include/cpu.h`.
+### `void invpcid_flush_all(void)`
+Flushes all contexts.
 
-### `bool cpu_has_pcid(void)`
-Returns `true` if the processor supports the PCIDE bit in CR4.
+## 3. Secure Transition Helpers
 
-### `bool cpu_has_invpcid(void)`
-Returns `true` if the processor supports the `INVPCID` instruction.
+Defined in `kernel/include/mode.h`.
 
-## 4. Usage Example
+### `void mode_enter_secure_context(void)`
+Switches kernel to `PCID_KERNEL_SECURE` for transition-critical operations.
 
-```c
-// Creating a new reality
-uint64_t new_pml4 = vmm_fork_pml4();
-uint16_t my_pcid = pcid_alloc();
-
-// High-speed context switch
-vmm_switch(new_pml4, my_pcid);
-
-// ... perform work ...
-
-// Precision TLB flush
-invpcid_flush_single(my_pcid, 0x1234000);
-```
+### `void mode_exit_secure_context(void)`
+Returns kernel to `PCID_KERNEL`.

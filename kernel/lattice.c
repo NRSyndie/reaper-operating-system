@@ -115,11 +115,17 @@ bool lattice_handle_fault(uint64_t vaddr, uint64_t error_code) {
 
     // 1. Find the lattice attachment for this vaddr
     for (int i = 0; i < MAX_PROCESS_LATTICES; i++) {
-        if (proc->lattices[i].lattice && 
-            vaddr >= proc->lattices[i].vaddr && 
-            vaddr < proc->lattices[i].vaddr + (proc->lattices[i].page_count * PAGE_SIZE)) {
-            attach = &proc->lattices[i];
-            break;
+        if (proc->lattices[i].lattice) {
+            uint64_t start = proc->lattices[i].vaddr;
+            uint64_t span = (uint64_t)proc->lattices[i].page_count * PAGE_SIZE;
+            if (span == 0 || span - 1 > (UINT64_MAX - start)) {
+                continue;
+            }
+            uint64_t end = start + span;
+            if (vaddr >= start && vaddr < end) {
+                attach = &proc->lattices[i];
+                break;
+            }
         }
     }
 
@@ -127,6 +133,11 @@ bool lattice_handle_fault(uint64_t vaddr, uint64_t error_code) {
 
     lattice_t* lattice = attach->lattice;
     uint32_t page_idx = (vaddr - attach->vaddr) / PAGE_SIZE;
+    if (page_idx >= attach->page_count || page_idx >= lattice->page_count) {
+        klog_error("[PRISM] Fault index out of range: tid=%u page_idx=%u attach_pages=%u lattice_pages=%u vaddr=0x%lx.",
+                   curr_thread->tid, page_idx, attach->page_count, lattice->page_count, vaddr);
+        return false;
+    }
 
     // 2. Physics Check: Why did we fault?
     if (attach->is_source) {

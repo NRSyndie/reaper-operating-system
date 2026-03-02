@@ -244,7 +244,7 @@ All foundational debts listed above have been successfully repaid... table:: Fut
 Project Estimates & Status
 --------------------------
 
-*   **Current Phase:** Epoch III Closure Ratification (Days 46/47/54/55 closed on February 24, 2026; Days 12/13/14/15 closures ratified on March 1, 2026; Days 16/17/18/19/20/21/22/23/24 closures ratified on March 2, 2026 with matrix evidence).
+*   **Current Phase:** Epoch III Closure Ratification (Days 46/47/54/55 closed on February 24, 2026; Days 12/13/14/15 closures ratified on March 1, 2026; Days 16/17/18/19/20/21/22/23/24/25/26/27 closures ratified on March 2, 2026 with matrix evidence).
 *   **Total Estimated Time:** 13 - 19 Weeks (~4 Months).
 *   **Strategy:** Reaper Envelope (Compatibility-First ABI + Hardware-Enforced Envelope Tiers).
 

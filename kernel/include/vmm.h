@@ -97,12 +97,15 @@ typedef struct {
     uint64_t total_mappings;
     uint64_t total_unmappings;
     uint64_t page_faults;
-    
+
     // PCID Metrics
     uint16_t max_pcid_casual;
     uint16_t max_pcid_secure;
     uint16_t max_pcid_lockdown;
     uint16_t max_pcid_ghost;
+    uint64_t pcid_switches;
+    uint64_t pcid_switch_flushes;
+    uint64_t pcid_switch_rejects;
 } vmm_statistics_t;
 
 extern vmm_statistics_t vmm_stats;

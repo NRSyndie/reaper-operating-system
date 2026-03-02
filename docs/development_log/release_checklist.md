@@ -185,3 +185,30 @@ Use this checklist for every implementation day before declaring completion.
 - [ ] Forbidden marker `[DAY24-FAIL]` absent from matrix serial logs.
 - [ ] Repeat-run closure gate passes: `./tools/run_day24_closure_suite.sh`.
 - [ ] Vision/Security/Performance review artifacts captured in day closure report.
+
+## 22. Day 25 Closure Ratification Gates
+- [ ] Day 25 closure contract reviewed: `docs/components/day25/day25_closure_contract.md`
+- [ ] Runtime marker `[TEST] Day 25 PCID Partition Contract: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 25 TLB Scrub Contract: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 25 Secure Context Contract: SUCCESS.` present.
+- [ ] Forbidden marker `[DAY25-FAIL]` absent from matrix serial logs.
+- [ ] Repeat-run closure gate passes: `./tools/run_day25_closure_suite.sh`.
+- [ ] Vision/Security/Performance review artifacts captured in day closure report.
+
+## 23. Day 26 Closure Ratification Gates
+- [ ] Day 26 closure contract reviewed: `docs/components/day26/day26_closure_contract.md`
+- [ ] Runtime marker `[TEST] Day 26 Prismatic Substrate Contract: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 26 Void Wall Contract: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 26 Attunement Contract: SUCCESS.` present.
+- [ ] Forbidden marker `[DAY26-FAIL]` absent from matrix serial logs.
+- [ ] Repeat-run closure gate passes: `./tools/run_day26_closure_suite.sh`.
+- [ ] Vision/Security/Performance review artifacts captured in day closure report.
+
+## 24. Day 27 Closure Ratification Gates
+- [ ] Day 27 closure contract reviewed: `docs/components/day27/day27_closure_contract.md`
+- [ ] Runtime marker `[TEST] Day 27 Boundary Hardening Contract: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 27 Strict Foundation Contract: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 27 Syscall Rejection Contract: SUCCESS.` present.
+- [ ] Forbidden marker `[DAY27-FAIL]` absent from matrix serial logs.
+- [ ] Repeat-run closure gate passes: `./tools/run_day27_closure_suite.sh`.
+- [ ] Vision/Security/Performance review artifacts captured in day closure report.

@@ -74,8 +74,9 @@ struct pcid_allocator {
     uint32_t freed_count_ghost;
 
     // Global statistics (optional, for debugging/overall tracking)
-    uint32_t total_allocations; 
+    uint32_t total_allocations;
     uint32_t total_reuses;
+    uint32_t total_tlb_scrubs;
     spinlock_t lock; // Global lock for the entire allocator for now. Fine-grained locks per-mode can be added later.
 };
 

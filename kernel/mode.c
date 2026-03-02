@@ -270,6 +270,7 @@ static envelope_deny_t env_verify_transition(const env_compiled_transition_t* co
 
 static bool env_apply_transition(const env_compiled_transition_t* compiled, env_apply_snapshot_t* snapshot) {
     mode_id_t current = kernel_mode_state.current_mode;
+    bool secure_context = false;
 
     if (!snapshot) return false;
 
@@ -296,6 +297,9 @@ static bool env_apply_transition(const env_compiled_transition_t* compiled, env_
     __atomic_fetch_add(&kernel_mode_state.security_epoch, 1, __ATOMIC_RELAXED);
     scheduler_on_mode_transition(current, compiled->to_mode, mode_get_security_epoch());
 
+    mode_enter_secure_context();
+    secure_context = true;
+
     if (compiled->ghost_flush_required) {
         invpcid_flush_all();
         klog_info("SCHED_GHOST_FLUSH enter=%u exit=%u",
@@ -312,6 +316,10 @@ static bool env_apply_transition(const env_compiled_transition_t* compiled, env_
         case MODE_CASUAL:
         default:
             break;
+    }
+
+    if (secure_context) {
+        mode_exit_secure_context();
     }
 
     env_marker_apply(compiled);

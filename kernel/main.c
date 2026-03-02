@@ -306,23 +306,66 @@ static void test_mode_transitions(void) {
 
 static void test_pcid_subsystem(void) {
     kprintf("[TEST] PCID Partitioning & Cross-Mode Checks...\n");
-    
+    uint32_t scrubs_before = pcid_manager.total_tlb_scrubs;
+
     uint16_t casual_id = pcid_alloc(MODE_CASUAL);
     uint16_t secure_id = pcid_alloc(MODE_SECURE);
     uint16_t lockdown_id = pcid_alloc(MODE_LOCKDOWN);
     uint16_t ghost_id = pcid_alloc(MODE_GHOST);
 
-    if (casual_id < PCID_BASE_CASUAL || casual_id >= PCID_BASE_SECURE) kpanic("PCID-TEST: Casual ID out of range!");
-    if (secure_id < PCID_BASE_SECURE || secure_id >= PCID_BASE_LOCKDOWN) kpanic("PCID-TEST: Secure ID out of range!");
-    if (lockdown_id < PCID_BASE_LOCKDOWN || lockdown_id >= PCID_BASE_GHOST) kpanic("PCID-TEST: Lockdown ID out of range!");
-    if (ghost_id < PCID_BASE_GHOST) kpanic("PCID-TEST: Ghost ID out of range!");
+    if (casual_id == PCID_ERROR || secure_id == PCID_ERROR ||
+        lockdown_id == PCID_ERROR || ghost_id == PCID_ERROR) {
+        kprintf("[DAY25-FAIL] pcid allocation failure casual=%u secure=%u lockdown=%u ghost=%u\n",
+                casual_id, secure_id, lockdown_id, ghost_id);
+        kpanic("DAY25-TEST: pcid allocation failure");
+    }
+
+    if (casual_id < PCID_BASE_CASUAL || casual_id >= PCID_BASE_SECURE) {
+        kprintf("[DAY25-FAIL] casual id out of range id=%u\n", casual_id);
+        kpanic("DAY25-TEST: casual id out of range");
+    }
+    if (secure_id < PCID_BASE_SECURE || secure_id >= PCID_BASE_LOCKDOWN) {
+        kprintf("[DAY25-FAIL] secure id out of range id=%u\n", secure_id);
+        kpanic("DAY25-TEST: secure id out of range");
+    }
+    if (lockdown_id < PCID_BASE_LOCKDOWN || lockdown_id >= PCID_BASE_GHOST) {
+        kprintf("[DAY25-FAIL] lockdown id out of range id=%u\n", lockdown_id);
+        kpanic("DAY25-TEST: lockdown id out of range");
+    }
+    if (ghost_id < PCID_BASE_GHOST || ghost_id > PCID_SCHEME_MAX) {
+        kprintf("[DAY25-FAIL] ghost id out of range id=%u\n", ghost_id);
+        kpanic("DAY25-TEST: ghost id out of range");
+    }
 
     pcid_free(casual_id, MODE_CASUAL);
     pcid_free(secure_id, MODE_SECURE);
     pcid_free(lockdown_id, MODE_LOCKDOWN);
     pcid_free(ghost_id, MODE_GHOST);
 
+    if ((pcid_manager.total_tlb_scrubs - scrubs_before) < 4) {
+        kprintf("[DAY25-FAIL] expected >=4 tlb scrubs observed=%u before=%u\n",
+                pcid_manager.total_tlb_scrubs, scrubs_before);
+        kpanic("DAY25-TEST: tlb scrub contract failure");
+    }
+
+    mode_enter_secure_context();
+    if (cpu_has_pcid() && vmm_get_current_pcid() != PCID_KERNEL_SECURE) {
+        kprintf("[DAY25-FAIL] secure context pcid mismatch expected=%u actual=%u\n",
+                PCID_KERNEL_SECURE, vmm_get_current_pcid());
+        kpanic("DAY25-TEST: secure context entry mismatch");
+    }
+
+    mode_exit_secure_context();
+    if (cpu_has_pcid() && vmm_get_current_pcid() != PCID_KERNEL) {
+        kprintf("[DAY25-FAIL] kernel context pcid mismatch expected=%u actual=%u\n",
+                PCID_KERNEL, vmm_get_current_pcid());
+        kpanic("DAY25-TEST: secure context exit mismatch");
+    }
+
     kprintf("[TEST] PCID Partitioning: SUCCESS.\n");
+    kprintf("[TEST] Day 25 PCID Partition Contract: SUCCESS.\n");
+    kprintf("[TEST] Day 25 TLB Scrub Contract: SUCCESS.\n");
+    kprintf("[TEST] Day 25 Secure Context Contract: SUCCESS.\n");
 
     /* 
      * --- NEGATIVE TESTS (MANUAL VERIFICATION) ---

@@ -2,8 +2,11 @@
 #include "include/console.h"
 #include "include/utils.h"
 #include "include/klog.h"
+#include "include/cpu.h"
 #include <string.h> // For memset
 #include <stdbool.h>
+
+_Static_assert(PCID_SCHEME_MAX < PCID_KERNEL_SECURE, "PCID scheme overlaps secure kernel PCID");
 
 // Global Allocator Instance
 struct pcid_allocator pcid_manager;
@@ -213,6 +216,13 @@ void pcid_free(uint16_t pcid, mode_id_t mode) {
     uint16_t relative_idx = pcid - mode_base;
 
     if (bitmap_test_relative(bitmap, relative_idx)) {
+        /*
+         * Scrub stale TLB state before returning the ID to the allocator.
+         * Reuse without this flush can leak old translations into the next owner.
+         */
+        invpcid(INVPCID_TYPE_SINGLE_CONTEXT, pcid, 0);
+        pcid_manager.total_tlb_scrubs++;
+
         bitmap_clear_relative(bitmap, relative_idx);
         if (*allocated_count > 0) { // Safety check to prevent underflow
             (*allocated_count)--;
@@ -232,4 +242,3 @@ void pcid_free(uint16_t pcid, mode_id_t mode) {
 
 // pcid_is_allocated is removed as it's not compatible with per-mode bitmaps
 // and its functionality is absorbed into the alloc/free logic.
-

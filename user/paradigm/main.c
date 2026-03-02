@@ -71,6 +71,8 @@ int main(int argc, char** argv) {
 
     /* Adversarial syscall boundary probes (must fail safely) */
     int guard_failures = 0;
+    bool day27_boundary_ok = false;
+    bool day27_strict_ok = false;
     if (sys_log_checked((const char*)0x800000000000ULL) != -1) {
         guard_failures++;
         sys_log("PARADIGM: Probe FAIL (log_checked kernel pointer).");
@@ -132,8 +134,10 @@ int main(int argc, char** argv) {
     }
 
     if (guard_failures == 0) {
+        day27_boundary_ok = true;
         sys_log("PARADIGM: Boundary probes passed (safe failures confirmed).");
     } else {
+        sys_log("[DAY27-FAIL] boundary probes failed");
         sys_log("PARADIGM: Boundary probes FAILED.");
     }
 
@@ -217,11 +221,19 @@ int main(int argc, char** argv) {
     if (sys_map_strict(2, 12, slot_pdpt, MAP_FLAG_P | MAP_FLAG_U) != -1) law2_failures++;
 
     if (law2_failures == 0) {
+        day27_strict_ok = true;
         sys_log("PARADIGM: Law 2 strict negative probes passed.");
     } else {
         day16_failures++;
         sys_log("[DAY16-FAIL] strict rights negative probes failed");
+        sys_log("[DAY27-FAIL] strict negative probes failed");
         sys_log("PARADIGM: Law 2 strict negative probes FAILED.");
+    }
+
+    if (day27_boundary_ok && day27_strict_ok) {
+        sys_log("[TEST] Day 27 Boundary Hardening Contract: SUCCESS.");
+        sys_log("[TEST] Day 27 Strict Foundation Contract: SUCCESS.");
+        sys_log("[TEST] Day 27 Syscall Rejection Contract: SUCCESS.");
     }
 
     // 6. Link the Chain (strict path)
@@ -379,11 +391,14 @@ int main(int argc, char** argv) {
 
     /* TEST: PRISMATIC LATTICES (LAW 6) */
     int day20_failures = 0;
+    int day26_failures = 0;
     sys_log("PARADIGM: Testing Prismatic Lattices...");
     uint32_t slot_lattice = 50;
     if (sys_lattice_create(2, slot_lattice) != 0) {
         day20_failures++;
+        day26_failures++;
         sys_log("[DAY20-FAIL] lattice create failed");
+        sys_log("[DAY26-FAIL] prismatic substrate create failed");
         sys_log("PARADIGM: Lattice Creation Failed.");
     } else {
         sys_log("PARADIGM: Lattice Created (2 pages).");
@@ -391,7 +406,9 @@ int main(int argc, char** argv) {
         uint64_t lattice_vaddr = 0x20000000;
         if (sys_lattice_attach(slot_lattice, lattice_vaddr) != 0) {
             day20_failures++;
+            day26_failures++;
             sys_log("[DAY20-FAIL] lattice attach failed");
+            sys_log("[DAY26-FAIL] prismatic substrate attach failed");
             sys_log("PARADIGM: Lattice Attach Failed.");
         } else {
             sys_log("PARADIGM: Lattice Attached at 0x20000000.");
@@ -405,7 +422,9 @@ int main(int argc, char** argv) {
                 sys_log("PARADIGM: Lattice Attunement SUCCESS.");
             } else {
                 day20_failures++;
+                day26_failures++;
                 sys_log("[DAY20-FAIL] source attune rejected");
+                sys_log("[DAY26-FAIL] attunement rejected for source");
                 sys_log("PARADIGM: Lattice Attunement FAILED.");
             }
 
@@ -425,15 +444,25 @@ int main(int argc, char** argv) {
                     sys_log("PARADIGM: Real fault probe captured in Fate Strings.");
                 } else {
                     day20_failures++;
+                    day26_failures++;
                     sys_log("[DAY20-FAIL] lattice first-touch fault missing");
+                    sys_log("[DAY26-FAIL] void wall first-touch fault missing");
                     sys_log("PARADIGM: Real fault probe missing from Fate Strings.");
                 }
             } else {
                 day20_failures++;
+                day26_failures++;
                 sys_log("[DAY20-FAIL] fault ledger empty after lattice probe");
+                sys_log("[DAY26-FAIL] fault ledger empty after void wall probe");
                 sys_log("PARADIGM: Fault ledger empty after real fault probe.");
             }
         }
+    }
+
+    if (day26_failures == 0) {
+        sys_log("[TEST] Day 26 Prismatic Substrate Contract: SUCCESS.");
+        sys_log("[TEST] Day 26 Void Wall Contract: SUCCESS.");
+        sys_log("[TEST] Day 26 Attunement Contract: SUCCESS.");
     }
 
     sys_log("PARADIGM: Testing ReadOnly Lattice Listeners...");

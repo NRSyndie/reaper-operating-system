@@ -88,7 +88,7 @@ Epoch III now runs as a final-product delivery program: preserve ABI/runtime sta
 
 ## 9) Current Status Checkpoint (2026-03-02)
 
-- Active slice: Epoch III closure ratification (Days 46/47/54/55 + Day 12 closure ratification + Day 13 closure ratification + Day 14 closure ratification + Day 15 closure ratification + Day 16 closure ratification + Day 17 closure ratification + Day 18 closure ratification + Day 19 closure ratification + Day 20 closure ratification + Day 21 closure ratification + Day 22 closure ratification + Day 23 closure ratification + Day 24 closure ratification).
+- Active slice: Epoch III closure ratification (Days 46/47/54/55 + Day 12 closure ratification + Day 13 closure ratification + Day 14 closure ratification + Day 15 closure ratification + Day 16 closure ratification + Day 17 closure ratification + Day 18 closure ratification + Day 19 closure ratification + Day 20 closure ratification + Day 21 closure ratification + Day 22 closure ratification + Day 23 closure ratification + Day 24 closure ratification + Day 25 closure ratification + Day 26 closure ratification + Day 27 closure ratification).
 - Completed in current slice:
   - kernel transition envelope pipeline with compile/verify/apply/attest marker evidence
   - Paradigm accepted/rejected transition probes through `GATE_OP_MODE_TRANSITION`
@@ -154,6 +154,18 @@ Epoch III now runs as a final-product delivery program: preserve ABI/runtime sta
     - added deterministic Day 24 PMM/Law9/Ocular closure markers in kernel self-tests.
     - added explicit forbidden `[DAY24-FAIL]` path for Day 24 contract regressions.
     - matrix gate extended with Day 24 required/forbidden markers plus repeat-run Day 24 closure suite.
+  - **Day 25 Closure Ratification:**
+    - hardened `vmm_switch` with fail-closed PCID/mode/alignment checks.
+    - added deterministic PCID free-path TLB scrub contract and Day 25 closure markers in kernel self-tests.
+    - matrix gate extended with Day 25 required/forbidden markers plus repeat-run Day 25 closure suite.
+  - **Day 26 Closure Ratification:**
+    - added deterministic Day 26 Law 6 markers for prismatic substrate, Void Wall, and attunement path.
+    - added explicit forbidden `[DAY26-FAIL]` path and repeat-run Day 26 closure suite.
+    - hardened kernel lattice fault-window/index validation in `lattice_handle_fault`.
+  - **Day 27 Closure Ratification:**
+    - added deterministic Day 27 markers for syscall boundary hardening and strict foundation probes.
+    - added explicit forbidden `[DAY27-FAIL]` path and repeat-run Day 27 closure suite.
+    - elevated Day 27 boundary/strict evidence from generic logs to closure-gated runtime contracts.
 - Product boundary:
   - BSP-only ESAK profile is explicitly ratified for this closure (`[TEST] ESAK IPI profile: BSP_ONLY`).
   - Day 12 closure now requires deterministic matrix markers for fault isolation, rendezvous contract, reaper lifecycle, and process annihilation.
@@ -169,3 +181,6 @@ Epoch III now runs as a final-product delivery program: preserve ABI/runtime sta
   - Day 22 closure now requires deterministic Derivation Trees markers and absence of Day 22 failure markers.
   - Day 23 closure now requires deterministic Foundation Allocator markers and absence of Day 23 failure markers.
   - Day 24 closure now requires deterministic Foundation Hardening/Ocular markers and absence of Day 24 failure markers.
+  - Day 25 closure now requires deterministic PCID colorization/scrub/secure-context markers and absence of Day 25 failure markers.
+  - Day 26 closure now requires deterministic Law 6 substrate/Void Wall/attunement markers and absence of Day 26 failure markers.
+  - Day 27 closure now requires deterministic boundary/strict foundation markers and absence of Day 27 failure markers.

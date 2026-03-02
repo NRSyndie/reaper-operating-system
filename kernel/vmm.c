@@ -479,9 +479,21 @@ void vmm_unmap(pt_entry_t* pml4, uint64_t virt) {
 
 void vmm_switch(uint64_t pml4_phys, uint16_t pcid, mode_id_t mode) { // Modified signature
     if (pcid > PCID_MAX) { // Use PCID_MAX from pcid.h
-        klog_error("VMM: Attempted to switch to invalid PCID %u (max %u).", pcid, PCID_MAX);
-        // We could kpanic here, but letting it return might be better for debug, though unsafe.
-        return;
+        vmm_stats.pcid_switch_rejects++;
+        klog_critical("VMM: Attempted to switch to invalid PCID %u (max %u). PANIC!", pcid, PCID_MAX);
+        kpanic("PCID COLORIZATION VIOLATION: Invalid PCID value.");
+    }
+
+    if ((pml4_phys & 0xFFFULL) != 0) {
+        vmm_stats.pcid_switch_rejects++;
+        klog_critical("VMM: Attempted to switch with unaligned PML4 0x%lx. PANIC!", pml4_phys);
+        kpanic("VMM SWITCH VIOLATION: Unaligned PML4.");
+    }
+
+    if (mode <= MODE_VOID || mode > MODE_KERNEL) {
+        vmm_stats.pcid_switch_rejects++;
+        klog_critical("VMM: Attempted to switch with invalid mode %d. PANIC!", mode);
+        kpanic("PCID COLORIZATION VIOLATION: Invalid mode.");
     }
 
     // --- PCID Colorization Validation ---
@@ -491,11 +503,13 @@ void vmm_switch(uint64_t pml4_phys, uint16_t pcid, mode_id_t mode) { // Modified
 
     if (mode == MODE_KERNEL) {
         if (pcid != PCID_KERNEL && pcid != PCID_KERNEL_SECURE) {
+            vmm_stats.pcid_switch_rejects++;
             klog_critical("VMM: PCID Colorization Violation! Attempted to switch to non-kernel PCID %u while in MODE_KERNEL context. PANIC!", pcid);
             kpanic("PCID COLORIZATION VIOLATION: Kernel tried to use non-kernel PCID.");
         }
     } else { // User modes
         if (pcid < expected_mode_base || pcid >= (expected_mode_base + expected_mode_count)) {
+            vmm_stats.pcid_switch_rejects++;
             klog_critical("VMM: PCID Colorization Violation! PCID %u is outside range [%u-%u] for mode %d. PANIC!",
                           pcid, expected_mode_base, expected_mode_base + expected_mode_count - 1, mode);
             kpanic("PCID COLORIZATION VIOLATION: Invalid PCID for target mode.");
@@ -515,13 +529,14 @@ void vmm_switch(uint64_t pml4_phys, uint16_t pcid, mode_id_t mode) { // Modified
     if (read_cr4() & (1 << 17)) {
         // PCID is enabled
         cr3_val |= (pcid & 0xFFF);
-        
+
         // NOFLUSH bit: Preserve TLB entries for this PCID
         // CRITICAL: If we are in GHOST mode, we force a flush to ensure 100% isolation.
         // The NOFLUSH bit being 0 means an implicit flush.
-        if (mode != MODE_GHOST) { 
+        if (mode != MODE_GHOST) {
             cr3_val |= (1ULL << 63); // Set NOFLUSH bit
         } else {
+            vmm_stats.pcid_switch_flushes++;
             // For GHOST mode, we explicitly do NOT set the NOFLUSH bit,
             // which results in an implicit flush of the old context's TLB.
             klog_debug("VMM: GHOST mode switch detected. Enforcing TLB flush (NOFLUSH=0).");
@@ -529,6 +544,7 @@ void vmm_switch(uint64_t pml4_phys, uint16_t pcid, mode_id_t mode) { // Modified
     }
 
     write_cr3(cr3_val);
+    vmm_stats.pcid_switches++;
     klog_debug("VMM: Switched to PML4 0x%lx, PCID %u, Mode %d.", pml4_phys, pcid, mode);
 }
 
