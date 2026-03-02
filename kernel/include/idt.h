@@ -71,5 +71,7 @@ typedef struct {
 void idt_init(void);
 bool idt_self_test(void);
 bool idt_get_metrics(idt_metrics_t* out_metrics);
+void idt_note_spurious39(void);
+void idt_note_spurious47(void);
 
 #endif // REAPER_IDT_H

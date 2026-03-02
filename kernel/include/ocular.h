@@ -41,4 +41,9 @@ void ocular_project(void);
  */
 void ocular_bleach(void);
 
+/**
+ * @brief Returns true when Ocular has a usable framebuffer and cache state.
+ */
+bool ocular_is_ready(void);
+
 #endif

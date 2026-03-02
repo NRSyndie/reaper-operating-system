@@ -35,6 +35,11 @@ static inline bool cap_allowed_modes_nonzero(uint8_t modes) {
     return modes != 0;
 }
 
+static inline bool cap_allowed_modes_valid(uint8_t modes) {
+    if (!cap_allowed_modes_nonzero(modes)) return false;
+    return (modes & (uint8_t)~CAP_MODE_VALID_MASK) == 0;
+}
+
 static inline bool cap_identity_is_valid(const cap_identity_t* ident) {
     return ident && ident->magic == CAP_IDENT_MAGIC;
 }
@@ -64,7 +69,7 @@ void cap_reset_metrics(void) {
 
 cap_identity_t* cap_identity_create(uint64_t obj, uint16_t type, uint16_t rights, uint32_t badge, uint8_t allowed_modes) {
     if (!cap_is_valid_type(type)) return NULL;
-    if (!cap_allowed_modes_nonzero(allowed_modes)) return NULL;
+    if (!cap_allowed_modes_valid(allowed_modes)) return NULL;
 
     if (!identity_cache) {
         slab_policy_t policy;
@@ -171,6 +176,11 @@ cap_identity_t* cap_lookup(cnode_t* root, uint32_t cptr) {
     }
 
     if (!cap_identity_is_alive(ident)) {
+        cap_metric_inc(&cap_metrics.lookup_miss);
+        return NULL;
+    }
+
+    if (!cap_allowed_modes_valid(ident->allowed_modes)) {
         cap_metric_inc(&cap_metrics.lookup_miss);
         return NULL;
     }
@@ -369,6 +379,12 @@ int cap_mint(cnode_t* root, uint32_t src_cptr, uint32_t dst_cptr, uint16_t new_r
     }
 
     if ((new_rights & parent->rights) != new_rights) {
+        cap_metric_inc(&cap_metrics.policy_deny);
+        cap_metric_inc(&cap_metrics.mint_fail);
+        return -1;
+    }
+
+    if (!cap_allowed_modes_valid(allowed_modes)) {
         cap_metric_inc(&cap_metrics.policy_deny);
         cap_metric_inc(&cap_metrics.mint_fail);
         return -1;

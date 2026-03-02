@@ -1,0 +1,459 @@
+# Reaper-OS Security Mode: GHOST
+# Description: Extreme OpSec for offensive operations in hostile environments
+# Philosophy: Hide in the dark, hunt the predators - assume everything is malware
+# Trigger: Manual only (user-initiated)
+
+mode_name: ghost
+mode_id: 4
+philosophy: "Hide in the dark - hunt and survive"
+default: false
+auto_activated: false
+manual_only: true
+offensive_posture: true
+
+# ============================================================================
+# NETWORK POLICY - EXTREME OPSEC
+# ============================================================================
+network:
+  enabled: true  # Network needed for operations
+  default_connection: tor_only
+  
+  tor:
+    required: true
+    multi_hop: true  # Extra security
+    exit_node_preference: random
+    circuit_rotation_minutes: 10
+    isolate_per_application: true
+    
+  vpn:
+    available: true
+    chain_with_tor: true  # VPN → Tor or Tor → VPN
+    
+  anonymization:
+    mac_address_randomization: every_boot
+    hostname_randomization: true
+    hostname_format: random  # random-af3d2
+    timezone: utc  # Never leak local timezone
+    user_agent_randomization: true
+    canvas_fingerprint_resistance: true
+    webrtc: disabled  # Prevent IP leaks
+    
+  firewall:
+    enabled: true
+    default_policy: deny_all
+    whitelist_mode: true
+    block_clearnet: true  # No direct connections
+    
+  dns:
+    provider: tor_dns_only
+    block_system_dns: true
+    dnssec: required
+    
+  monitoring:
+    level: forensic
+    packet_capture: true
+    full_pcap: true
+    deep_packet_inspection: true
+    timing_analysis: true
+    side_channel_detection: true
+    
+  restrictions:
+    no_persistent_connections: true
+    no_websockets: true  # Can leak identity
+    no_webrtc: true
+    block_geolocation_api: true
+
+# ============================================================================
+# FILESYSTEM POLICY - TOTAL ISOLATION
+# ============================================================================
+filesystem:
+  isolation_mode: overlay
+  
+  ghost_partition:
+    path: /ghost
+    ephemeral: true  # Changes discarded unless saved
+    
+    structure:
+      - /ghost/root      # Ephemeral root overlay
+      - /ghost/home      # Isolated home
+      - /ghost/tmp       # Isolated temp
+      - /ghost/apps      # Installed applications
+      - /ghost/logs      # Forensic logs (persisted)
+      
+  blocked_paths:
+    - /home            # Real home BLOCKED
+    - /etc             # Read-only overlay
+    - /var             # BLOCKED except /var/log/ghost
+    - /root            # BLOCKED
+    - /boot            # BLOCKED
+    
+  writable_paths:
+    - /ghost/*         # Everything in Ghost
+    
+  overlay_filesystem:
+    lower_layer: /  # Real filesystem (read-only)
+    upper_layer: /ghost/overlay
+    work_dir: /ghost/.work
+    merged_view: /ghost/root
+    
+  executable_verification:
+    required: false  # May run malware intentionally
+    log_all_executions: true
+    
+  installation:
+    destination: /ghost/apps
+    cannot_modify_real_system: true
+    
+  on_exit:
+    options:
+      - discard_all      # Wipe everything
+      - preserve_ghost   # Keep /ghost for next session
+      - export_logs      # Save logs for analysis
+      
+  tmp_policy:
+    isolated: true
+    path: /ghost/tmp
+    wipe_on_exit: true
+
+# ============================================================================
+# PROCESS POLICY - EXTREME ISOLATION
+# ============================================================================
+process:
+  isolation_mode: maximum
+  
+  namespaces:
+    pid: isolated     # Cannot see other processes
+    network: isolated # Separate network stack
+    mount: isolated   # Separate filesystem view
+    ipc: isolated     # Cannot communicate with host
+    uts: isolated     # Separate hostname
+    user: isolated    # UID mapping
+    
+  per_application_isolation:
+    enabled: true
+    
+    example:
+      browser:
+        pid_namespace: browser_ns
+        network_namespace: browser_net
+        cannot_see: [terminal, other_apps]
+        
+      terminal:
+        pid_namespace: terminal_ns
+        network_namespace: terminal_net
+        cannot_see: [browser, other_apps]
+        
+  resource_limits:
+    enabled: true
+    per_application:
+      max_cpu_percent: 50
+      max_memory_mb: 4096
+      max_processes: 50
+      
+  execution_policy:
+    allow_unverified: true  # Intentionally run malware
+    monitor_everything: true
+    
+  suspicious_behavior:
+    action: log_and_monitor  # Don't block, observe
+    triggers:
+      - network_connection
+      - file_access
+      - process_spawn
+      - syscall_patterns
+      
+  allow_debuggers: true  # For reverse engineering
+  allow_ptrace: true
+
+# ============================================================================
+# HARDWARE POLICY
+# ============================================================================
+hardware:
+  usb:
+    allow_devices: true
+    sandboxed: true  # Files copied to /ghost, not direct access
+    
+  peripherals:
+    webcam:
+      enabled: true
+      require_per_use_approval: true
+      indicator_required: true
+      
+    microphone:
+      enabled: true
+      require_per_use_approval: true
+      
+    bluetooth:
+      enabled: false  # Too risky for fingerprinting
+      
+  sensors:
+    accelerometer: disabled  # Fingerprinting vector
+    gyroscope: disabled
+    ambient_light: disabled
+    
+  firmware_updates:
+    blocked: true
+
+# ============================================================================
+# PRIVILEGE POLICY
+# ============================================================================
+privileges:
+  sudo:
+    enabled: true  # User needs control
+    require_password: true
+    timeout_minutes: 5
+    log_all_commands: true
+    
+  root_access:
+    allowed: true  # For pentesting tools
+    within_namespace: true  # Root in Ghost, not on host
+    audit_all_actions: true
+    
+  setuid_binaries:
+    allowed: true
+    within_ghost_only: true
+    
+  polkit:
+    enabled: true
+    ghost_isolated: true
+
+# ============================================================================
+# MONITORING POLICY - FORENSIC LEVEL
+# ============================================================================
+monitoring:
+  logging_level: forensic
+  
+  log_categories:
+    syscalls: true           # Every single syscall
+    network_packets: true    # Full packet capture
+    file_access: true        # Every file operation
+    process_execution: true  # Every exec
+    memory_access: true      # Memory patterns
+    ipc: true               # All IPC
+    timing: true            # Timing information
+    
+  syscall_logging:
+    include_arguments: true
+    include_return_values: true
+    include_stack_traces: false  # Too much data
+    
+  network_logging:
+    full_pcap: true
+    decode_protocols: true
+    extract_files: true
+    
+  retention:
+    days: infinite  # User decides when to delete
+    path: /ghost/logs/session_{timestamp}
+    
+  snapshots:
+    enabled: true
+    interval_minutes: 5
+    include_memory: true
+    
+  estimated_log_size:
+    per_hour: 50GB+  # Warning: MASSIVE logs
+    
+  compression:
+    enabled: true
+    algorithm: zstd
+
+# ============================================================================
+# CRYPTOGRAPHY POLICY
+# ============================================================================
+crypto:
+  enforce_encryption:
+    all_ghost_files: true
+    all_network_traffic: true
+    
+  vault:
+    accessible: true
+    auto_lock_minutes: 5
+    
+  clipboard:
+    enabled: true
+    encrypted: true
+    clear_after_seconds: 30
+    
+  swap:
+    encrypted: true
+    wipe_on_exit: true
+
+# ============================================================================
+# OPERATIONAL SECURITY
+# ============================================================================
+opsec:
+  anti_forensics:
+    wipe_ram_on_exit: true
+    secure_delete: true  # Overwrite deleted files
+    no_hibernation: true
+    no_swap_to_disk: true
+    
+  anti_fingerprinting:
+    randomize_hardware_ids: true
+    randomize_font_list: true
+    randomize_screen_resolution: false  # Too obvious
+    resist_canvas_fingerprinting: true
+    resist_audio_fingerprinting: true
+    
+  anti_tracking:
+    block_analytics: true
+    block_trackers: true
+    cookie_isolation: true
+    clear_cookies_on_exit: true
+    
+  metadata_scrubbing:
+    strip_exif: true
+    strip_pdf_metadata: true
+    strip_document_metadata: true
+
+# ============================================================================
+# TOOLS & CAPABILITIES
+# ============================================================================
+tools:
+  pentesting_tools:
+    available: true
+    installed_to: /ghost/apps
+    
+    categories:
+      - reconnaissance
+      - exploitation
+      - post_exploitation
+      - forensics
+      - reverse_engineering
+      
+  malware_analysis:
+    sandbox: builtin
+    monitoring: comprehensive
+    
+  network_analysis:
+    packet_capture: true
+    protocol_analysis: true
+    traffic_generation: true
+
+# ============================================================================
+# USER EXPERIENCE
+# ============================================================================
+ui:
+  visual_indicator:
+    border_color: black
+    icon: ⚫
+    overlay: black_corner_indicator
+    terminal_prefix: "[GHOST]"
+    
+  notifications:
+    priority: normal
+    sound: false  # Stealth
+    minimize_indicators: true
+    
+  restrictions_notice:
+    show_on_mode_enter: true
+    message: |
+      ⚫ GHOST MODE ACTIVE
+      
+      Extreme OpSec enabled:
+      ✓ All traffic through Tor
+      ✓ MAC address randomized
+      ✓ Complete isolation from host
+      ✓ Forensic logging active
+      
+      WARNING: Log sizes can exceed 50GB/hour
+      
+      You are operating in: /ghost
+      Real system is protected from your activities.
+      
+      Exit options:
+      [1] Discard all changes
+      [2] Preserve /ghost for next session  
+      [3] Export logs for analysis
+
+# ============================================================================
+# SESSION MANAGEMENT
+# ============================================================================
+session:
+  on_enter:
+    - create_ghost_overlay
+    - randomize_mac_address
+    - randomize_hostname
+    - start_tor_circuits
+    - isolate_namespaces
+    - begin_forensic_logging
+    - display_opsec_checklist
+    
+  during_session:
+    - monitor_all_activity
+    - rotate_tor_circuits
+    - log_to_ghost_partition
+    - isolate_per_application
+    
+  on_exit:
+    prompt_user:
+      - "Discard all changes?"
+      - "Save /ghost partition?"
+      - "Export logs?"
+      
+    actions:
+      - wipe_ram
+      - wipe_swap
+      - optionally_wipe_ghost
+      - restore_mac_address
+      - restore_hostname
+      - stop_tor
+      
+  automatic_exit:
+    triggers:
+      - critical_breach_detected
+      - host_system_compromised
+      
+    action: immediate_wipe
+
+# ============================================================================
+# ISOLATION DETAILS
+# ============================================================================
+isolation:
+  what_ghost_sees:
+    filesystem:
+      /: overlay (changes don't affect real system)
+      /home: /ghost/home (empty initially)
+      /etc: read-only overlay
+      /tmp: /ghost/tmp
+      
+    processes:
+      - Only processes in Ghost namespace
+      - Cannot see host processes
+      - Cannot see other Ghost apps
+      
+    network:
+      - Only Tor
+      - Cannot see host connections
+      - Isolated per-application
+      
+  what_ghost_cannot_access:
+    - Real /home
+    - Real /etc (write)
+    - Real /var
+    - Host processes
+    - Host network connections
+    - Hardware directly (sandboxed)
+    
+  protections:
+    - Malware in Ghost cannot escape
+    - Malware cannot see real data
+    - Malware cannot persist to host
+    - Changes discarded on exit (if chosen)
+
+# ============================================================================
+# AUTOMATIC ESCALATION (Even in Ghost)
+# ============================================================================
+escalation:
+  to_secure:
+    triggers:
+      - ghost_escape_attempt
+      - host_system_access_attempt
+      
+  to_lockdown:
+    triggers:
+      - critical_host_breach
+      - paradigm_compromise
+      
+  note: "Even Ghost can escalate if host is threatened"

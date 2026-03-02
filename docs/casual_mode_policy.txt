@@ -1,0 +1,238 @@
+# Reaper-OS Security Mode: CASUAL
+# Description: Normal daily computing with user-controlled security
+# Philosophy: Convenience-first, user decides security level
+# Default Mode: YES
+
+mode_name: casual
+mode_id: 1
+philosophy: "Normal life, user in control"
+default: true
+
+# ============================================================================
+# NETWORK POLICY
+# ============================================================================
+network:
+  enabled: true
+  default_connection: clearnet  # No forced VPN/Tor
+  
+  # User can toggle these features
+  toggles:
+    vpn:
+      available: true
+      default: false
+      providers: [wireguard, openvpn]
+    
+    tor:
+      available: true
+      default: false
+      exit_node_preference: auto
+    
+    firewall:
+      enabled: true
+      default_policy: allow_outbound
+      block_incoming: true
+      
+  # Basic protections always on
+  protections:
+    dns_over_https: true
+    block_known_malicious_ips: true
+    rate_limiting: false
+  
+  # Monitoring
+  logging:
+    level: basic  # Connection attempts, blocked connections
+    packet_capture: false
+    dns_queries: false
+
+# ============================================================================
+# FILESYSTEM POLICY
+# ============================================================================
+filesystem:
+  read_only_paths: []  # Nothing read-only in Casual
+  
+  executable_verification:
+    required: false  # Can run anything
+    warn_unsigned: true  # But warn about it
+    check_origin: false
+  
+  writable_locations:
+    - /home
+    - /tmp
+    - /var/tmp
+    - /opt
+  
+  mount_policy:
+    allow_new_mounts: true
+    allow_removable_media: true
+    auto_mount_usb: true
+    usb_mode: read_write
+  
+  file_monitoring:
+    critical_files: [/etc/passwd, /etc/shadow, /boot]
+    alert_on_modification: true
+    log_all_writes: false
+
+# ============================================================================
+# PROCESS POLICY
+# ============================================================================
+process:
+  execution_restrictions:
+    allow_unverified: true
+    require_origin: false
+    
+  resource_limits:
+    enabled: false  # No limits in Casual
+    
+  process_isolation:
+    enabled: false  # No sandboxing by default
+    optional_sandboxing: true  # User can enable per-app
+  
+  suspicious_behavior:
+    monitoring: passive  # Detect but don't block
+    action: alert_only
+    
+  allowed_debuggers: true
+  allow_ptrace: true
+
+# ============================================================================
+# HARDWARE POLICY
+# ============================================================================
+hardware:
+  usb:
+    allow_devices: true
+    auto_mount_storage: true
+    block_hid_injection: true  # Prevent BadUSB attacks
+    
+  peripherals:
+    webcam:
+      enabled: true
+      indicator_required: true  # LED must be on when active
+      
+    microphone:
+      enabled: true
+      indicator_required: false
+      
+    bluetooth:
+      enabled: true
+      discoverable: false
+      
+  firmware_updates:
+    allowed: true
+    require_confirmation: true
+    verify_signature: true
+
+# ============================================================================
+# PRIVILEGE POLICY
+# ============================================================================
+privileges:
+  sudo:
+    enabled: true
+    require_password: true
+    timeout_minutes: 15  # Remember password for 15 min
+    
+  root_access:
+    allowed: true
+    audit_all_actions: true
+    
+  setuid_binaries:
+    allowed: true
+    whitelist_only: false
+    
+  polkit:
+    enabled: true
+    require_auth: true
+
+# ============================================================================
+# MONITORING POLICY
+# ============================================================================
+monitoring:
+  logging_level: standard
+  
+  log_categories:
+    authentication: true
+    network_connections: true
+    file_modifications: false  # Too noisy
+    process_execution: false
+    syscalls: false
+    
+  retention:
+    days: 7
+    compress_after_days: 1
+    
+  alerting:
+    immediate_alerts:
+      - failed_login_threshold  # 5 failures in 10 min
+      - root_access
+      - critical_file_modification
+    
+  snapshots:
+    enabled: false
+    interval_minutes: null
+
+# ============================================================================
+# CRYPTOGRAPHY POLICY
+# ============================================================================
+crypto:
+  enforce_encryption:
+    new_files: false  # Optional
+    sensitive_dirs: [~/.ssh, ~/.gnupg]
+    
+  vault:
+    auto_lock: true
+    timeout_minutes: 15
+    
+  clipboard:
+    enabled: true
+    clear_passwords_after_seconds: 60
+    
+  swap_encryption:
+    required: false
+
+# ============================================================================
+# AUTOMATIC ESCALATION TRIGGERS
+# ============================================================================
+escalation:
+  to_secure:
+    triggers:
+      - failed_login_attempts: 5 in 10 minutes
+      - unverified_process_network_activity
+      - suspicious_file_modification
+      - malware_signature_detected
+      
+  to_lockdown:
+    triggers:
+      - root_compromise_detected
+      - core_daemon_unresponsive
+      - kernel_integrity_failure
+      - paradigm_compromise
+
+# ============================================================================
+# USER EXPERIENCE
+# ============================================================================
+ui:
+  visual_indicator:
+    border_color: green
+    icon: 🟢
+    overlay: none
+    
+  notifications:
+    priority: normal
+    sound: false
+    
+  restrictions_notice:
+    show_on_mode_enter: false
+
+# ============================================================================
+# TOGGLEABLE FEATURES
+# ============================================================================
+features:
+  available:
+    - vpn_toggle
+    - tor_toggle
+    - firewall_rules
+    - usb_autoMount
+    - webcam_access
+    - microphone_access
+    - bluetooth
+    
+  requires_restart: []  # All toggleable without restart

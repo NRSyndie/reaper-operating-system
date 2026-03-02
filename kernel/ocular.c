@@ -42,6 +42,10 @@ void ocular_bleach(void) {
     spinlock_irqrestore(&ocular_lock, flags);
 }
 
+bool ocular_is_ready(void) {
+    return fb_ptr != NULL && projection_cache != NULL;
+}
+
 int ocular_set_projection(lattice_t* lattice, uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint8_t reality_mask) {
     uint64_t flags = spinlock_irqsave(&ocular_lock);
 

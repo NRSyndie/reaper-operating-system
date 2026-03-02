@@ -300,6 +300,38 @@ static bool scheduler_auth_allowed(thread_t* target, mode_id_t active_mode) {
     return target->sched_auth_mode == (uint8_t)active_mode;
 }
 
+static bool scheduler_lease_valid(thread_t* thread, mode_id_t active_mode, uint64_t security_epoch) {
+    if (!thread) return false;
+    if (thread->owner && thread->owner->mode == MODE_KERNEL) return true;
+    
+    /* Hot-path cache check */
+    if (thread->lease_validated_epoch == security_epoch) {
+        return thread->lease_valid_cache;
+    }
+
+    bool valid = true;
+
+    /* 1. Epoch check: Lease must not be stale */
+    if (thread->lease.epoch < security_epoch) {
+        valid = false;
+        klog_debug("ENTRY_REJECT_EPOCH tid=%u lease_epoch=%lu current_epoch=%lu", 
+                   thread->tid, thread->lease.epoch, security_epoch);
+    }
+
+    /* 2. Mode check: Lease must match active reality */
+    if (valid && !(thread->lease.mode_mask & (1 << (uint8_t)active_mode))) {
+        valid = false;
+        klog_debug("ENTRY_REJECT_MODE tid=%u lease_mask=0x%x active_mode=%u",
+                   thread->tid, thread->lease.mode_mask, (unsigned)active_mode);
+    }
+
+    /* Update cache */
+    thread->lease_validated_epoch = security_epoch;
+    thread->lease_valid_cache = valid;
+
+    return valid;
+}
+
 static uint64_t process_budget_try_consume(process_t* proc, uint64_t request) {
     uint64_t current;
     uint64_t consume;
@@ -880,6 +912,16 @@ void scheduler_add(thread_t* thread) {
         return;
     }
 
+    if (!scheduler_lease_valid(thread, target_cpu->active_mode, target_cpu->active_security_epoch)) {
+        target_cpu->denied_no_auth++;
+        target_env->denied_auth++;
+        // Emit markers for matrix
+        kprintf("%s tid=%u\n", ENTRY_REJECT_EPOCH, thread->tid);
+        scheduler_set_state(thread, THREAD_BLOCKED_AUTH);
+        spinlock_irqrestore(&target_cpu->runq_lock, flags);
+        return;
+    }
+
     if (thread->owner &&
         __atomic_load_n(&thread->owner->remaining_process_budget, __ATOMIC_ACQUIRE) == 0 &&
         thread->sched_class != SCHED_CLASS_SYSTEM) {
@@ -966,6 +1008,19 @@ void scheduler_wake(thread_t* thread) {
                                  SCHED_EVENT_AUTH_DENY,
                                  thread->tid,
                                  FATE_RESULT_REJECTED);
+            scheduler_set_state(thread, THREAD_BLOCKED_AUTH);
+            spinlock_irqrestore(&target_cpu->runq_lock, flags);
+            return;
+        }
+
+        if (!scheduler_lease_valid(thread, target_cpu->active_mode, target_cpu->active_security_epoch)) {
+            target_cpu->denied_no_auth++;
+            target_env->denied_auth++;
+            if (thread->lease.epoch < target_cpu->active_security_epoch) {
+                kprintf("%s tid=%u\n", ENTRY_REJECT_EPOCH, thread->tid);
+            } else {
+                kprintf("%s tid=%u\n", ENTRY_REJECT_MODE, thread->tid);
+            }
             scheduler_set_state(thread, THREAD_BLOCKED_AUTH);
             spinlock_irqrestore(&target_cpu->runq_lock, flags);
             return;
@@ -1143,6 +1198,15 @@ retry_pick:
         if (!scheduler_auth_allowed(next, cpu->active_mode)) {
             cpu->denied_no_auth++;
             env->denied_auth++;
+            scheduler_set_state(next, THREAD_BLOCKED_AUTH);
+        } else if (!scheduler_lease_valid(next, cpu->active_mode, cpu->active_security_epoch)) {
+            cpu->denied_no_auth++;
+            env->denied_auth++;
+            if (next->lease.epoch < cpu->active_security_epoch) {
+                kprintf("%s tid=%u\n", ENTRY_REJECT_EPOCH, next->tid);
+            } else {
+                kprintf("%s tid=%u\n", ENTRY_REJECT_MODE, next->tid);
+            }
             scheduler_set_state(next, THREAD_BLOCKED_AUTH);
         } else if (next_mode != cpu->active_mode && next_mode != MODE_KERNEL) {
             cpu->denied_mode_mismatch++;

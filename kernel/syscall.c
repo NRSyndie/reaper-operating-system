@@ -579,7 +579,12 @@ uint64_t syscall_dispatcher(uint64_t num, uint64_t a0, uint64_t a1, uint64_t a2,
         }
 
         case SYS_MODE_QUERY:
-            ret = (uint64_t)mode_get_current();
+            if (owner && owner->pid == 1) {
+                ret = (uint64_t)mode_get_current();
+            } else {
+                /* Redacted for occupants: "The Architect is pleased." */
+                ret = (uint64_t)MODE_CASUAL;
+            }
             break;
 
         case SYS_MODE_TRANSITION:
@@ -616,6 +621,11 @@ uint64_t syscall_dispatcher(uint64_t num, uint64_t a0, uint64_t a1, uint64_t a2,
         case SYS_CAP_MINT:
             if (!owner || !owner->cspace) {
                 g_sys_metrics.ownerless_rejects++;
+                ret = -1;
+                break;
+            }
+            if ((((uint8_t)a4) & (uint8_t)~CAP_MODE_VALID_MASK) != 0 || ((uint8_t)a4) == 0) {
+                g_sys_metrics.invalid_rejects++;
                 ret = -1;
                 break;
             }
@@ -793,9 +803,20 @@ uint64_t syscall_dispatcher(uint64_t num, uint64_t a0, uint64_t a1, uint64_t a2,
                 ret = -1;
                 break;
             }
+            if (!(ident->rights & CAP_RIGHT_READ)) {
+                g_sys_metrics.perm_rejects++;
+                ret = -1;
+                break;
+            }
 
             lattice_t* lattice = (lattice_t*)ident->object_ptr;
             bool is_source = (ident->rights & CAP_RIGHT_WRITE);
+            uint64_t span = (uint64_t)lattice->page_count * PAGE_SIZE;
+            if ((vaddr & (PAGE_SIZE - 1)) != 0 || vaddr >= USER_VA_LIMIT || span == 0 || (span - 1 > (USER_VA_LIMIT - 1 - vaddr))) {
+                g_sys_metrics.invalid_rejects++;
+                ret = -1;
+                break;
+            }
 
             ret = (uint64_t)process_attach_lattice(owner, lattice, vaddr, is_source);
             break;
@@ -812,6 +833,16 @@ uint64_t syscall_dispatcher(uint64_t num, uint64_t a0, uint64_t a1, uint64_t a2,
             }
             cap_identity_t* ident = cap_lookup(owner->cspace, lattice_cap);
             if (!ident || ident->type != CAP_TYPE_LATTICE) {
+                g_sys_metrics.invalid_rejects++;
+                ret = -1;
+                break;
+            }
+            if (!(ident->rights & CAP_RIGHT_READ)) {
+                g_sys_metrics.perm_rejects++;
+                ret = -1;
+                break;
+            }
+            if ((vaddr & (PAGE_SIZE - 1)) != 0 || vaddr >= USER_VA_LIMIT) {
                 g_sys_metrics.invalid_rejects++;
                 ret = -1;
                 break;
@@ -834,8 +865,18 @@ uint64_t syscall_dispatcher(uint64_t num, uint64_t a0, uint64_t a1, uint64_t a2,
                 ret = -1;
                 break;
             }
+            if (page_count == 0 || page_count > 1024) {
+                g_sys_metrics.invalid_rejects++;
+                ret = -1;
+                break;
+            }
 
             if (listener_count >= 1 && listener_slot0 == source_slot) {
+                g_sys_metrics.invalid_rejects++;
+                ret = -1;
+                break;
+            }
+            if (listener_count >= 1 && listener_slot0 == 0) {
                 g_sys_metrics.invalid_rejects++;
                 ret = -1;
                 break;
@@ -843,6 +884,11 @@ uint64_t syscall_dispatcher(uint64_t num, uint64_t a0, uint64_t a1, uint64_t a2,
 
             if (listener_count >= 2) {
                 if (listener_slot1 == source_slot || listener_slot1 == listener_slot0) {
+                    g_sys_metrics.invalid_rejects++;
+                    ret = -1;
+                    break;
+                }
+                if (listener_slot1 == 0) {
                     g_sys_metrics.invalid_rejects++;
                     ret = -1;
                     break;
@@ -944,6 +990,11 @@ uint64_t syscall_dispatcher(uint64_t num, uint64_t a0, uint64_t a1, uint64_t a2,
                 ret = (uint64_t)-1;
                 break;
             }
+            if (!(ident->rights & CAP_RIGHT_READ)) {
+                g_sys_metrics.perm_rejects++;
+                ret = (uint64_t)-1;
+                break;
+            }
 
             if (read_mode > FATE_READ_LATTICE) {
                 g_sys_metrics.invalid_rejects++;
@@ -982,6 +1033,12 @@ uint64_t syscall_dispatcher(uint64_t num, uint64_t a0, uint64_t a1, uint64_t a2,
 
             // Retrieve history
             int copied = mode_get_history_filtered(kernel_buf, count, (fate_read_mode_t)read_mode);
+            if (copied < 0 || (size_t)copied > count) {
+                kfree(kernel_buf);
+                g_sys_metrics.invalid_rejects++;
+                ret = (uint64_t)-1;
+                break;
+            }
             
             if (copied > 0) {
                 if (!copy_to_user(user_buf, kernel_buf, copied * sizeof(struct mode_transition))) {

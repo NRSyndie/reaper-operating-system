@@ -1,0 +1,449 @@
+# Reaper-OS Security Mode: LOCKDOWN
+# Description: Maximum emergency protection - system survival mode
+# Philosophy: Nothing in, nothing out, trust nothing - suffocate the threat
+# Trigger: Critical breach detected
+
+mode_name: lockdown
+mode_id: 3
+philosophy: "Remove the oxygen - suffocate intruders"
+default: false
+auto_activated: true
+emergency_mode: true
+
+# ============================================================================
+# NETWORK POLICY
+# ============================================================================
+network:
+  enabled: false  # COMPLETE NETWORK BLACKOUT
+  
+  physical:
+    disable_interfaces: all
+    disable_wifi: true
+    disable_ethernet: true
+    disable_bluetooth: true
+    disable_cellular: true
+    
+  kernel_level:
+    drop_all_packets: true
+    disable_ip_stack: true
+    block_layers: [physical, datalink, network, transport, application]
+    
+  kill_connections:
+    existing: true
+    timeout_seconds: 0  # Immediate
+    
+  dns:
+    freeze_cache: true
+    block_queries: true
+    
+  arp:
+    static_only: true
+    block_new_entries: true
+
+# ============================================================================
+# FILESYSTEM POLICY
+# ============================================================================
+filesystem:
+  read_only_paths:
+    - /              # ENTIRE ROOT FILESYSTEM
+    - /boot
+    - /usr
+    - /bin
+    - /sbin
+    - /lib
+    - /lib64
+    - /etc
+    - /var/lib/reaper
+    
+  executable_verification:
+    required: true
+    require_signature: true
+    require_origin: true
+    require_checksum: true
+    require_package_manager: true
+    minimum_age_minutes: 60  # Must be installed >1hr ago
+    
+  writable_locations:
+    - /var/log  # Only logs can be written
+    
+  mount_policy:
+    allow_new_mounts: false
+    unmount_removable: true  # Eject all USB
+    force_readonly: true
+    block_new_mounts: true
+    
+  file_monitoring:
+    critical_files: all
+    alert_on_any_modification: true
+    log_all_access: true
+    block_all_modifications: true
+    
+  suspicious_files:
+    action: delete_immediately
+    no_quarantine: true  # Too risky to keep
+    
+  tmp_restrictions:
+    no_write: true
+    no_execute: true
+    wipe_on_enter: true  # Clear /tmp when entering Lockdown
+
+# ============================================================================
+# PROCESS POLICY
+# ============================================================================
+process:
+  execution_restrictions:
+    allow_unverified: false
+    verified_only: true
+    
+  kill_immediately:
+    - unverified_binaries
+    - network_attempting_processes
+    - privilege_escalating_processes
+    - debugger_attached_processes
+    - code_injecting_processes
+    
+  whitelist:
+    mode: strict
+    allowed:
+      - core_daemons
+      - init_system
+      - terminal  # Minimal user interface
+      
+  max_total_processes: 50  # Very restrictive
+  
+  resource_limits:
+    enabled: true
+    max_cpu_percent: 25
+    max_memory_mb: 1024
+    max_processes_per_user: 10
+    max_threads: 10
+    max_children: 2
+    
+  process_isolation:
+    enabled: true
+    trust_level: zero
+    
+  ipc_restrictions:
+    daemon_only: true
+    block_shared_memory: true
+    block_unix_sockets: true  # Except Aegis
+    block_pipes: true
+    
+  debuggers:
+    allowed: false
+    kill_on_detection: true
+    
+  ptrace:
+    allowed: false
+
+# ============================================================================
+# HARDWARE POLICY
+# ============================================================================
+hardware:
+  usb:
+    kill_all_devices: true
+    block_new_devices: true
+    allowed_devices: []  # NOTHING
+    block_storage: true
+    block_networking: true
+    block_hid: true
+    
+  ports:
+    disable_physical: true
+    disable_drivers: true
+    blocked_ports: [usb, thunderbolt, ethernet, hdmi, sdcard]
+    
+  peripherals:
+    webcam:
+      enabled: false
+      
+    microphone:
+      enabled: false
+      
+    bluetooth:
+      enabled: false
+      
+    wifi:
+      enabled: false
+      
+    gps:
+      enabled: false
+      
+    fingerprint:
+      enabled: false
+      
+  dma:
+    block_all: true  # Prevent DMA attacks
+    
+  firmware_updates:
+    blocked: true
+
+# ============================================================================
+# PRIVILEGE POLICY
+# ============================================================================
+privileges:
+  sudo:
+    enabled: false  # COMPLETELY DISABLED
+    
+  root_access:
+    allowed: false  # NO ROOT ACCESS
+    
+  setuid_binaries:
+    blocked: true
+    
+  capabilities:
+    blocked: true
+    
+  polkit:
+    block_all: true
+    
+  privilege_escalation_commands:
+    disabled: [sudo, su, doas, pkexec]
+    
+  paradigm:
+    restrictions:
+      only_mode_change: true
+      require_physical_auth: true  # YubiKey required
+      exit_delay_seconds: 30
+
+# ============================================================================
+# MONITORING POLICY
+# ============================================================================
+monitoring:
+  logging_level: maximum
+  
+  log_categories:
+    authentication: true
+    network_attempts: true
+    file_activity: true  # PRIMARY FOCUS
+    process_creation: true
+    syscalls: true
+    privilege_attempts: true
+    hardware_changes: true
+    memory_modifications: true
+    
+  retention:
+    days: infinite  # Never delete
+    compress_after_days: 1
+    
+  alerting:
+    immediate_alerts:
+      - any_activity  # Alert on EVERYTHING
+      
+  snapshots:
+    enabled: true
+    interval_seconds: 30  # Every 30 seconds
+    keep_all: true
+    
+  screen_recording:
+    enabled: true  # For forensics
+    
+  keystroke_logging:
+    enabled: true  # Controversial but useful
+
+# ============================================================================
+# CRYPTOGRAPHY POLICY
+# ============================================================================
+crypto:
+  enforce_encryption:
+    all_new_files: true
+    
+  vault:
+    locked: false  # Keep accessible for emergency
+    timeout_minutes: 5
+    
+  clipboard:
+    disabled: true  # Prevent data exfiltration
+    
+  swap_encryption:
+    required: true
+    clear_on_enter: true  # Wipe swap on Lockdown entry
+    
+  memory:
+    clear_sensitive: true
+
+# ============================================================================
+# AUTOMATIC DE-ESCALATION
+# ============================================================================
+de_escalation:
+  automatic:
+    enabled: true
+    
+    conditions:
+      - threat_eliminated: true
+      - system_integrity_verified: true
+      - no_suspicious_activity_minutes: 30
+      
+    target_mode: secure  # Go to Secure, not Casual
+    
+  manual_override:
+    allowed: true
+    requirements:
+      - physical_authentication
+      - master_password
+      - acknowledge_risks
+      - countdown_seconds: 30
+      
+  failed_auto_recovery:
+    action: controlled_reboot
+    save_forensics: true
+    boot_into: recovery_mode
+
+# ============================================================================
+# USER EXPERIENCE
+# ============================================================================
+ui:
+  visual_indicator:
+    border_color: red
+    icon: 🔴
+    overlay: red_tint
+    full_screen_warning: true
+    
+  notifications:
+    priority: critical
+    sound: true
+    force_attention: true
+    
+  restrictions_notice:
+    show_on_mode_enter: true
+    message: |
+      🚨 LOCKDOWN MODE ACTIVE
+      
+      CRITICAL SECURITY EVENT DETECTED
+      Reason: {trigger_reason}
+      
+      SYSTEM RESTRICTIONS:
+      ⛔ Network: DISABLED
+      ⛔ USB: BLOCKED
+      ⛔ Root: DENIED
+      ✅ Execution: VERIFIED ONLY
+      
+      The system is attempting to contain the threat.
+      All activity is being logged for forensic analysis.
+      
+      Exit requires:
+      • Physical authentication (YubiKey)
+      • Master password
+      • 30 second countdown
+      
+      DO NOT EXIT unless threat is understood.
+
+# ============================================================================
+# THREAT RESPONSE
+# ============================================================================
+threat_response:
+  immediate_actions:
+    - kill_all_network_connections
+    - disconnect_usb_devices
+    - kill_suspicious_processes
+    - make_filesystem_readonly
+    - disable_privilege_escalation
+    - enable_maximum_logging
+    - capture_system_snapshot
+    - capture_memory_dumps
+    
+  analysis:
+    identify_threat_type: true
+    check_containable: true
+    attempt_remediation: true
+    
+  remediation_actions:
+    - kill_malicious_process
+    - quarantine_infected_files
+    - revoke_compromised_credentials
+    - patch_vulnerability
+    - verify_system_integrity
+    
+  if_remediation_fails:
+    - save_complete_logs
+    - save_memory_dumps
+    - save_network_capture
+    - create_forensic_snapshot
+    - initiate_controlled_reboot
+    - boot_into_recovery_mode
+    
+  forensics:
+    save_everything: true
+    evidence_path: /var/lib/reaper/forensics/lockdown
+    include:
+      - full_system_logs
+      - memory_dumps
+      - process_list
+      - network_connections
+      - file_modifications
+      - screenshots
+      - keystroke_logs
+
+# ============================================================================
+# ACTIVATION TRIGGERS
+# ============================================================================
+activation_triggers:
+  automatic:
+    - root_compromise_detected
+    - core_daemon_unresponsive_90s
+    - paradigm_compromised
+    - kernel_integrity_failure
+    - multiple_failed_escalations
+    - critical_system_file_modified
+    
+  authorized_initiators:
+    - paradigm  # Primary authority
+    - sentinel  # Emergency authority (if Paradigm compromised)
+    
+  cannot_be_initiated_by:
+    - user_applications
+    - other_daemons
+    - external_signals
+
+
+Implementation Concerns (Stuff you can fix later):
+1. Blocking all IPC except Aegis is tricky
+
+You may need a kernel primitive or a sandbox policy enforced by Singularity.
+
+2. “block_unix_sockets: true”
+
+Core daemons rely on their sockets—make an allowlist system.
+
+3. Mandatory executable verification
+
+You will need:
+
+signed packages
+
+signed binaries
+
+origin metadata
+
+a package manager that stores install timestamps
+
+Totally doable, just extra work.
+
+4. Screen recording & keystroke logging
+
+These need:
+
+a privileged “monitoring daemon”
+
+kernel hooks or a compositor hook
+
+Still doable.
+
+5. “Disable privilege escalation entirely”
+
+You’ll need to override all methods:
+
+setuid bits
+
+capabilities
+
+polkit
+
+ptrace
+
+/proc writes
+
+kernel syscalls
+
+This is actually perfect for a microkernel because your kernel has fewer syscalls.
+

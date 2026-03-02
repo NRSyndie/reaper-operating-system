@@ -89,9 +89,32 @@ void process_destroy(process_t* process) {
 
 int process_attach_lattice(process_t* proc, struct lattice* lattice, uint64_t vaddr, bool is_source) {
     if (!proc || !lattice) return -1;
+    if ((vaddr & (PAGE_SIZE - 1)) != 0) return -1;
+    if (lattice->page_count == 0) return -1;
+
+    uint64_t new_start = vaddr;
+    uint64_t new_span = (uint64_t)lattice->page_count * PAGE_SIZE;
+    uint64_t new_end;
+    if (new_span == 0) return -1;
+    if (new_span - 1 > (UINT64_MAX - new_start)) return -1;
+    new_end = new_start + new_span;
 
     // Find a free slot
     for (int i = 0; i < MAX_PROCESS_LATTICES; i++) {
+        if (proc->lattices[i].lattice != NULL) {
+            uint64_t cur_start = proc->lattices[i].vaddr;
+            uint64_t cur_span = (uint64_t)proc->lattices[i].page_count * PAGE_SIZE;
+            uint64_t cur_end = cur_start + cur_span;
+
+            if (proc->lattices[i].lattice == lattice && cur_start == vaddr) {
+                return -1;
+            }
+
+            if (new_start < cur_end && cur_start < new_end) {
+                return -1;
+            }
+        }
+
         if (proc->lattices[i].lattice == NULL) {
             proc->lattices[i].lattice = lattice;
             proc->lattices[i].vaddr = vaddr;
@@ -109,6 +132,7 @@ int process_attach_lattice(process_t* proc, struct lattice* lattice, uint64_t va
 
 int process_detach_lattice(process_t* proc, struct lattice* lattice, uint64_t vaddr) {
     if (!proc || !lattice) return -1;
+    if ((vaddr & (PAGE_SIZE - 1)) != 0) return -1;
 
     for (int i = 0; i < MAX_PROCESS_LATTICES; i++) {
         if (proc->lattices[i].lattice == lattice && proc->lattices[i].vaddr == vaddr) {

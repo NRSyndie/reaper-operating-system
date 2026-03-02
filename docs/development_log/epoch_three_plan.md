@@ -86,9 +86,9 @@ Epoch III now runs as a final-product delivery program: preserve ABI/runtime sta
   - `docs/components/scheduler/scheduler_lock_order.md`
   - `docs/components/syscalls/syscall_contracts.md` (sched-auth gate ops + metrics)
 
-## 9) Current Status Checkpoint (2026-02-22)
+## 9) Current Status Checkpoint (2026-03-02)
 
-- Active slice: Epoch III closure ratification (Days 46/47/54).
+- Active slice: Epoch III closure ratification (Days 46/47/54/55 + Day 12 closure ratification + Day 13 closure ratification + Day 14 closure ratification + Day 15 closure ratification + Day 16 closure ratification + Day 17 closure ratification + Day 18 closure ratification + Day 19 closure ratification + Day 20 closure ratification + Day 21 closure ratification + Day 22 closure ratification + Day 23 closure ratification + Day 24 closure ratification).
 - Completed in current slice:
   - kernel transition envelope pipeline with compile/verify/apply/attest marker evidence
   - Paradigm accepted/rejected transition probes through `GATE_OP_MODE_TRANSITION`
@@ -97,5 +97,75 @@ Epoch III now runs as a final-product delivery program: preserve ABI/runtime sta
   - atomic process budget consume/refill contract
   - revoke-immediate dequeue path with forced-reschedule flags
   - expanded runtime markers and matrix gate assertions
+  - **Day 11 Void Gate:**
+    - 4-stage Entry Pipeline (Compile/Verify/Apply/Attest) for initial genesis and scheduler jumps.
+    - Redacted `SYS_MODE_QUERY` for occupant reality isolation.
+    - Epoch-aware lease verification in scheduler gates with performance caching.
+    - Deterministic `[ENTRY_*]` audit markers verified in matrix.
+  - **Day 12 Closure Ratification:**
+    - deterministic closure markers for fault isolation, rendezvous, reaper lifecycle, and process annihilation added to kernel self-tests.
+    - matrix required-marker gate extended to include all Day 12 closure markers.
+    - Vision/Security/Performance closure artifacts synchronized in roadmap/report/version docs.
+  - **Day 13 Closure Ratification:**
+    - deterministic closure markers for extended-state init, context preservation, cross-thread isolation, and crucible stability added to kernel self-tests.
+    - matrix gate extended with Day 13 required markers and forbidden `[DAY13-FAIL]` marker.
+    - repeat-run Day 13 closure suite introduced for multi-run confidence validation.
+  - **Day 14 Closure Ratification:**
+    - deterministic closure markers for wait/yield/lifecycle ABI surface added to kernel self-tests.
+    - matrix gate extended with Day 14 required markers and forbidden lifecycle failure markers.
+    - repeat-run Day 14 closure suite introduced for multi-run confidence validation.
+  - **Day 15 Closure Ratification:**
+    - deterministic closure markers for genesis module contract, capability injection, and bootinfo bridge added in `kernel/genesis.c`.
+    - Paradigm bridge probe pass/fail markers added for user-space validation in `user/paradigm/main.c`.
+    - matrix gate extended with Day 15 required/forbidden markers and repeat-run Day 15 closure suite.
+  - **Day 16 Closure Ratification:**
+    - deterministic closure markers for capability-scoped mapping, strict rights enforcement, and unmap/remap lifecycle added in `user/paradigm/main.c`.
+    - fail-closed Day 16 marker path added for map-path contract violations.
+    - matrix gate extended with Day 16 required/forbidden markers and repeat-run Day 16 closure suite.
+  - **Day 17 Closure Ratification:**
+    - deterministic closure markers for IRQ-safe lock semantics, stack canary integrity, and spurious IRQ accounting added in `kernel/main.c`.
+    - fail-closed Day 17 marker path added for hardening contract violations.
+    - matrix gate extended with Day 17 required/forbidden markers and repeat-run Day 17 closure suite.
+  - **Day 18 Closure Ratification:**
+    - deterministic closure markers for ELF header validation, ELF loader contract, and C-daemon bootstrap added in `kernel/elf.c` and `user/paradigm/main.c`.
+    - fail-closed Day 18 marker path added for ELF/bootstrap contract violations.
+    - matrix gate extended with Day 18 required/forbidden markers and repeat-run Day 18 closure suite.
+  - **Day 19 Closure Ratification:**
+    - mode-mask contract hardened via `CAP_MODE_VALID_MASK` and strict `CAP_MODE_ALL` narrowing in shared/kernel capability headers.
+    - fail-closed mode-mask validation added in `cap_identity_create(...)`, `cap_mint(...)`, and `SYS_CAP_MINT`.
+    - deterministic Day 19 closure markers and forbidden `[DAY19-FAIL]` path added with matrix and repeat-run closure suite coverage.
+  - **Day 20 Closure Ratification:**
+    - hardened lattice create topology checks and attach/detach boundary validation in syscall path.
+    - hardened process lattice-attach path with overlap/duplicate rejection.
+    - deterministic Day 20 closure markers and forbidden `[DAY20-FAIL]` path added with matrix and repeat-run closure suite coverage.
+  - **Day 21 Closure Ratification:**
+    - hardened Fate read path to require explicit auditor read rights and fail-closed on copy-count mismatches.
+    - added deterministic Day 21 audit integrity markers and forbidden `[DAY21-FAIL]` path.
+    - matrix gate extended with Day 21 required/forbidden markers plus repeat-run Day 21 closure suite.
+  - **Day 22 Closure Ratification:**
+    - added deterministic Day 22 lineage/revocation closure markers in kernel self-tests.
+    - added explicit forbidden `[DAY22-FAIL]` path for recursive/deep-derivation regressions.
+    - matrix gate extended with Day 22 required/forbidden markers plus repeat-run Day 22 closure suite.
+  - **Day 23 Closure Ratification:**
+    - added deterministic Day 23 allocator closure marker in kernel self-tests.
+    - added explicit forbidden `[DAY23-FAIL]` path for allocator contract regressions.
+    - matrix gate extended with Day 23 required/forbidden markers plus repeat-run Day 23 closure suite.
+  - **Day 24 Closure Ratification:**
+    - added deterministic Day 24 PMM/Law9/Ocular closure markers in kernel self-tests.
+    - added explicit forbidden `[DAY24-FAIL]` path for Day 24 contract regressions.
+    - matrix gate extended with Day 24 required/forbidden markers plus repeat-run Day 24 closure suite.
 - Product boundary:
   - BSP-only ESAK profile is explicitly ratified for this closure (`[TEST] ESAK IPI profile: BSP_ONLY`).
+  - Day 12 closure now requires deterministic matrix markers for fault isolation, rendezvous contract, reaper lifecycle, and process annihilation.
+  - Day 13 closure now requires deterministic matrix markers for extended-state initialization/context isolation and absence of Day 13 failure markers.
+  - Day 14 closure now requires deterministic lifecycle syscall markers and absence of Day 14 failure markers.
+  - Day 15 closure now requires deterministic genesis bridge markers and absence of Day 15 failure markers.
+  - Day 16 closure now requires deterministic map/unmap contract markers and absence of Day 16 failure markers.
+  - Day 17 closure now requires deterministic hardening markers and absence of Day 17 failure markers.
+  - Day 18 closure now requires deterministic ELF/bootstrap markers and absence of Day 18 failure markers.
+  - Day 19 closure now requires deterministic Conditional Rune markers and absence of Day 19 failure markers.
+  - Day 20 closure now requires deterministic Lattice Bridge markers and absence of Day 20 failure markers.
+  - Day 21 closure now requires deterministic Fatal Forensics markers and absence of Day 21 failure markers.
+  - Day 22 closure now requires deterministic Derivation Trees markers and absence of Day 22 failure markers.
+  - Day 23 closure now requires deterministic Foundation Allocator markers and absence of Day 23 failure markers.
+  - Day 24 closure now requires deterministic Foundation Hardening/Ocular markers and absence of Day 24 failure markers.

@@ -85,5 +85,8 @@ The kernel exposes a minimal set of syscalls (defined in `shared/include/syscall
 
 ## 6. Current Roadmap Status
 - **Epoch I (Completed):** Core kernel primitives (Memory, IPC, Threads, Capabilities).
-- **Epoch II (In Progress):** Significant progress on Core Daemons, including Paradigm's evolution to a C-based daemon and initial user-space stability.
-- **Next Steps:** Continued completion of Core Daemons (Aegis, Sentinel), refining Mode Transitions, and further development of Layer 3 (Fate Strings), which has seen initial implementation with Fatal Forensics (Auditing).
+- **Epoch II (Completed):** Core Daemons (Paradigm), Mode logic, Fate Strings, and foundational hardening.
+- **Epoch III (In Progress):** Final-Product Closure.
+    - **Active Slice:** Days 46/47/54/55 (Envelope Pipeline, Day 5R Bridge, ESAK Scheduler, Void Gate Redesign).
+    - **Latest Milestone:** Day 11 Void Gate Redesign Closure (Entry Pipeline + Lease Enforcement) verified via matrix.
+    - **Next Steps:** Phase 3/4 hardware-backend envelope migration (MPK/VMFUNC) and final evidence re-baseline.

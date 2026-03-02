@@ -1,0 +1,231 @@
+
+• Collected. I now have the full Day 11 redesign context across code, docs, and test harness.
+
+  What I gathered
+
+  - Entry path and privilege transition:
+      - kernel/genesis.c uses paradigm_entry_stub -> user_mode_jump(...).
+      - kernel/interrupts.s has direct user_mode_jump (IRETQ) and syscall_entry (SWAPGS + SYSRETQ).
+  - Runtime transition pipeline already exists for mode transitions:
+      - kernel/mode.c implements compile/verify/apply/attest markers with legacy shim.
+  - Scheduler is already authority/mode/budget-gated:
+      - kernel/scheduler.c enforces auth, mode, budget at enqueue/wake/dispatch; updates TSS + syscall kernel stack on switch.
+  - Syscall ABI is gate-v2 and centralized:
+      - shared/include/syscall.h, kernel/syscall.c, user/lib/reaper.c.
+  - Day 11 dependency pieces verified:
+      - TSS stack management (kernel/gdt.c), per-thread kernel stacks (kernel/thread.c), user-half isolation in vmm_fork_pml4 (kernel/vmm.c).
+  - Test and evidence surfaces:
+      - tools/run_law2_fate_matrix.sh required/forbidden markers.
+      - Kernel startup tests in kernel/main.c.
+      - Paradigm runtime probes in user/paradigm/main.c.
+
+  Critical findings for redesign
+
+  - Occupants currently can query mode (sys_mode_query), which conflicts with your “occupants never know reality” model:
+      - user/include/reaper.h, user/lib/reaper.c, kernel/syscall.c.
+  - Day 11 entry is still a direct jump primitive; it is not yet contract/lease-based.
+  - Entry markers (ENTRY_*) do not exist yet; only envelope transition markers exist.
+  - syscall_entry is global CPU GS scratchpad-based (single cpu_syscall_gs), not explicit per-CPU struct.
+  - Matrix harness currently validates mode/scheduler/syscall markers, but not dedicated Day 11 lease/entry invariants.
+
+  Pitfall map (now confirmed in code)
+
+  - Policy-doc drift risk: mode policy docs describe much more than kernel-enforced contract today.
+  - False confidence risk if new laws are not tied to required markers + negative probes in matrix.
+
+  Test infrastructure readiness
+
+  - Strong baseline exists: build + ISO + matrix + Paradigm probes.
+  - Easy to extend: add new required markers and negative probes in tools/run_law2_fate_matrix.sh and user/paradigm/main.c.
+
+• It changes the strategy from “add checks around user_mode_jump” to “restructure runtime contracts”.
+
+  Concrete impact:
+
+  1. Day 11 scope expands
+
+  2. Mode-query API must change
+
+  - SYS_MODE_QUERY currently leaks Reality to Occupants.
+  - If we keep your model, this must be removed, stubbed, or capability-gated behind a privileged diagnostics path.
+
+  3. Use existing envelope pipeline pattern
+
+  - mode.c already has compile/verify/apply/attest with markers.
+  - Best strategy: implement Day 11 entry with the same pattern (entry contract/lease), not a bespoke one-off.
+
+  4. Integrate with existing auth gates
+
+  - Scheduler already enforces auth/mode/budget.
+  - Entry lease checks should plug into these gates, not duplicate parallel logic.
+
+  5. Testing must be matrix-first
+
+  - Existing verify_matrix harness is the release gate.
+  - Strategy now requires adding ENTRY_* required markers + negative probes in Paradigm and matrix script, otherwise no closure confidence.
+
+  6. Performance plan is mandatory
+
+  - syscall_entry/dispatch is hot path.
+  - New checks need epoch/lease caching to avoid regression; include explicit performance budget marker gate.
+
+  7. Doc-policy reconciliation is required work
+
+  - Policy docs over-specify behavior beyond current kernel enforcement.
+  - Strategy must include a conformance matrix (kernel_enforced / daemon_enforced / deferred) to prevent future drift.
+
+  Net: the gathered info pushes us to a contract-and-lease redesign anchored in existing gates, with API cleanup and matrix enforcement as first-class deliverables.
+
+• Actionable implementation checklist (file-mapped)
+
+  A. Define Day 11 entry contract and lease types [DONE]
+
+  - Edit:
+      - shared/include/*.h (new or existing ABI header for entry contract IDs/status).
+      - kernel/include/*.h (kernel-private lease/cache state).
+  - Add:
+      - lease identity (lease_id, epoch, authority scope, mode scope, expiry semantics).
+      - validation result codes that can be surfaced as markers and syscall errors.
+  - Done when:
+      - kernel + user headers compile together with no ABI mismatch warnings.
+
+  B. Implement entry pipeline with marker parity [DONE]
+
+  - Edit:
+      - kernel/mode.c (or sibling module dedicated to entry pipeline).
+      - kernel/genesis.c (replace direct entry assumptions with contract invocation).
+  - Add stages:
+      - entry_compile -> entry_verify -> entry_apply -> entry_attest.
+  - Add markers:
+      - ENTRY_COMPILE_OK
+      - ENTRY_VERIFY_OK
+      - ENTRY_APPLY_OK
+      - ENTRY_ATTEST_OK
+      - ENTRY_REJECT_<REASON>
+  - Done when:
+      - every successful entry emits all 4 positive markers in order.
+      - every rejected entry emits one deterministic reject marker.
+
+  C. Integrate with scheduler authority/mode/budget gates [DONE]
+
+  - Edit:
+      - kernel/scheduler.c
+  - Add:
+      - lease verification at enqueue/wake/dispatch boundaries using existing auth/mode/budget checks.
+      - epoch-aware cache to avoid re-validating unchanged lease state on hot path.
+  - Done when:
+      - no duplicated policy logic outside scheduler gates.
+      - dispatch still succeeds for valid workloads in all modes.
+
+  D. Remove occupant-reality leakage in mode query API [DONE]
+
+  - Edit:
+      - shared/include/syscall.h
+      - kernel/syscall.c
+      - user/include/reaper.h
+      - user/lib/reaper.c
+      - user/paradigm/main.c (adapt probes/callers)
+  - Options (pick one and document):
+      - remove SYS_MODE_QUERY from occupant ABI.
+      - return redacted/stubbed value for occupants.
+      - capability-gate diagnostics-only query.
+  - Done when:
+      - occupant code path cannot recover raw reality mode.
+
+  E. Tighten syscall entry state ownership [DONE]
+
+  - Edit:
+      - kernel/interrupts.s
+      - kernel code owning cpu_syscall_gs state
+  - Add:
+      - explicit per-CPU state contract (if not full refactor now, introduce an adapter boundary and marker coverage).
+  - Done when:
+      - ownership model is explicit in code comments and tested via boot probes.
+
+  F. Extend matrix and Paradigm probes [DONE]
+
+  - Edit:
+      - tools/run_law2_fate_matrix.sh
+      - user/paradigm/main.c
+      - kernel/main.c (startup self-test hooks if needed)
+  - Add required markers:
+      - ENTRY_COMPILE_OK
+      - ENTRY_VERIFY_OK
+      - ENTRY_APPLY_OK
+      - ENTRY_ATTEST_OK
+  - Add forbidden/negative checks:
+      - entry success without verify marker.
+      - occupant-visible raw mode leakage.
+      - dispatch with stale/invalid lease epoch.
+  - Done when:
+      - matrix fails on each injected violation and passes on clean run.
+
+  G. Add policy-to-enforcement conformance matrix [DONE]
+
+  - Edit:
+      - docs/components/modes/*.md
+      - docs/mmm.txt (tracking table or section)
+  - Add for each policy rule:
+      - enforcement owner: kernel_enforced | daemon_enforced | deferred.
+      - evidence: marker/test name and file location.
+  - Done when:
+      - every policy statement maps to one owner and one evidence reference.
+
+• Improved rollout plan (proposal)
+
+  Phase 0: Contract freeze
+
+  - Freeze Day 11 invariants and marker names before deep refactors.
+  - Decide SYS_MODE_QUERY policy (remove, redact, or capability-gate).
+  - Exit gate:
+      - approved invariants list and marker schema committed in docs.
+
+  Phase 1: Non-invasive scaffolding
+
+  - Land headers/types and marker plumbing behind compile-time guards.
+  - Keep legacy direct path available as fallback.
+  - Exit gate:
+      - build passes; no behavior change when feature flag is off.
+
+  Phase 2: Entry pipeline activation
+
+  - Route genesis/entry through compile/verify/apply/attest path.
+  - Emit ENTRY_* markers and reject markers.
+  - Exit gate:
+      - clean matrix run with ENTRY_* required markers.
+
+  Phase 3: Scheduler/lease hardening
+
+  - Add epoch-aware lease checks at scheduler boundaries.
+  - Enforce stale lease rejection with deterministic markers.
+  - Exit gate:
+      - negative probes prove stale lease cannot dispatch.
+
+  Phase 4: API cleanup and occupant isolation
+
+  - Remove/leash SYS_MODE_QUERY leak according to chosen policy.
+  - Update userland probes and ABI docs.
+  - Exit gate:
+      - occupant probes cannot infer raw mode.
+
+  Phase 5: Performance and regression closure
+
+  - Measure syscall/scheduler overhead pre/post (same workload and mode mix).
+  - Validate caching effectiveness and marker completeness.
+  - Exit gate:
+      - no unacceptable regression vs baseline and matrix remains green.
+
+• Plan quality upgrades to apply immediately
+
+  - Convert vague goals into verifiable invariants:
+      - each invariant must name enforcement point + failure marker.
+  - Require "negative proof" for every new law:
+      - one intentional violation test that must fail.
+  - Separate architecture decisions from implementation tasks:
+      - ADR-style mini record for each irreversible ABI decision.
+  - Add rollback strategy per phase:
+      - feature flag or fallback path defined before phase start.
+  - Track ownership explicitly:
+      - each checklist item has one owner and one completion artifact.
+  - Prevent doc drift:
+      - no policy doc merge unless conformance matrix row is updated.

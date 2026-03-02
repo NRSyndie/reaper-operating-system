@@ -66,6 +66,14 @@ thread_t* thread_create(process_t* owner, void (*entry)(void)) {
     t->sched_auth_required = (owner && owner->mode != MODE_KERNEL && owner->cspace != NULL);
     t->sched_auth_valid = !t->sched_auth_required;
 
+    /* Initialize Day 11 Entry Lease */
+    if (owner) {
+        t->lease.id = 0; // Genesis lease for this thread
+        t->lease.epoch = mode_get_security_epoch();
+        t->lease.mode_mask = (1 << (uint8_t)owner->mode);
+        t->lease.authority_mask = 0xFFFF;
+    }
+
     owner->thread_count++;
 
     /* Prepare initial stack frame for context_switch */

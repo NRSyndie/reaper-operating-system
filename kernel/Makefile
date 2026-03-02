@@ -17,7 +17,7 @@ ASFLAGS = -g
 LDFLAGS = -nostdlib -T linker.ld
 
 # --- Source Files ---
-SRCS_C = main.c console.c serial.c pmm.c vmm.c mode.c limine_reqs.c cpu.c pcid.c slab.c capability.c idt.c gdt.c klog.c syscall.c process.c thread.c scheduler.c genesis.c elf.c lattice.c kmalloc.c ocular.c
+SRCS_C = main.c console.c serial.c pmm.c vmm.c mode.c limine_reqs.c cpu.c pcid.c slab.c capability.c idt.c gdt.c klog.c syscall.c process.c thread.c scheduler.c genesis.c elf.c lattice.c kmalloc.c ocular.c entry.c
 SRCS_ASM = interrupts.s
 
 OBJS = $(SRCS_ASM:.s=.o) $(SRCS_C:.c=.o)
@@ -78,7 +78,7 @@ limine_build:
 # New ISO target for Limine
 iso: $(ISO_FILE)
 
-$(ISO_FILE): $(KERNEL_ELF)
+$(ISO_FILE): $(KERNEL_ELF) $(USER_ELF)
 	$(VECHO) "  BUILD   User Space"
 	$(Q)$(MAKE) -C ../user
 	$(VECHO) "  ISO     $(ISO_FILE) (with Limine)"

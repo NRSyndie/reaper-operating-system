@@ -32,11 +32,14 @@ typedef enum {
 #define CAP_RIGHT_EXECUTE (1 << 4) /* Ability to execute memory */
 
 /* Mode Constraint Bitmask (Conditional Runes) */
-#define CAP_MODE_ALL      0xFF
 #define CAP_MODE_VOID     (1 << 0)
 #define CAP_MODE_CASUAL   (1 << 1)
 #define CAP_MODE_SECURE   (1 << 2)
 #define CAP_MODE_LOCKDOWN (1 << 3)
 #define CAP_MODE_GHOST    (1 << 4)
+#define CAP_MODE_VALID_MASK (CAP_MODE_VOID | CAP_MODE_CASUAL | CAP_MODE_SECURE | CAP_MODE_LOCKDOWN | CAP_MODE_GHOST)
+#define CAP_MODE_ALL      CAP_MODE_VALID_MASK
+
+_Static_assert(CAP_MODE_VALID_MASK == CAP_MODE_ALL, "cap mode mask drift");
 
 #endif /* REAPER_CAPABILITY_H */

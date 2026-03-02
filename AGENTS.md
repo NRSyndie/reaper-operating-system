@@ -27,6 +27,7 @@ Run commands from the repo root:
 
 ## Testing Guidelines
 - Primary tests are boot-time kernel self-tests and userspace probes exercised during `make -C kernel run`.
+- **Mandatory Gate:** Run `make -C kernel verify_matrix` to execute the automated 3-run runtime matrix validation (Law 2 strict mapping, Fate Strings integrity, and Envelope/Entry markers).
 - Review `kernel/serial.log` for pass/fail markers and syscall boundary checks from Paradigm.
 - Add regression coverage by extending kernel self-test routines and deterministic userspace probes.
 

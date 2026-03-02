@@ -301,8 +301,33 @@
     *   [PASS] **Display:** Ocular Engine initialized and detected the LFB.
 
 ### Epoch II, Day 22: Law 1 - Derivation Trees (The Snap)
-... (existing content) ...
+*   **What was changed:**
+    *   Implemented capability lineage-aware derivation graph semantics:
+        *   `cap_identity_t` parent pointer and sibling-linked child list (`first_child`, `next_sibling`, `prev_sibling`)
+        *   parent-epoch snapshot tracking for descendant liveness checks
+    *   Implemented recursive revocation in capability core:
+        *   `cap_revoke_tree(...)` recursively marks revoked subtree roots and descendants
+        *   `cap_revoke(...)` performs epoch advance and lineage-locked subtree revoke
+    *   Added runtime lineage validation probes in kernel self-tests:
+        *   recursive revocation (`Parent -> Child -> Grandchild`)
+        *   deep derivation invalidation (`A -> B -> C`)
+*   **Why it was changed:**
+    *   To enforce Law 1 authority hierarchy with deterministic root-level revocation semantics.
+    *   To guarantee delegated authority cannot survive ancestor revocation.
+*   **Test Results:**
+    *   [PASS] **Recursive Revocation:** Parent/child/grandchild invalidated after root revoke.
     *   [PASS] **Deep Lineage:** Verified correctly across a 3-level derivation chain (A -> B -> C).
+
+### Epoch II, Day 23: Foundation Hardening (Allocator Contract Reconciliation)
+*   **What was changed:**
+    *   Established allocator hardening baseline around slab policy invariants and `kmalloc` large-allocation fallback.
+    *   This day had no standalone finalized report artifact in the historical ledger; closure ratification now binds it to concrete allocator runtime evidence.
+*   **Why it was changed:**
+    *   To eliminate chronology drift between historical implementation sequence and closure-grade enforceable evidence.
+    *   To ensure foundational memory-hardening behavior is represented in the same governance model as adjacent days.
+*   **Test Results:**
+    *   [PASS] **Allocator Contract:** Kernel allocator validation probes passed in boot self-tests.
+    *   [PASS] **Closure Gate:** Day 23 closure suite and matrix marker checks passed.
 
 ### Epoch II, Day 25: Law 5 - PCID Colorization (Reality Binding)
 *   **What was changed:**
@@ -881,3 +906,340 @@
         *   `[TEST] Deterministic RR rotation stable`
         *   `[TEST] SMP atomic budget integrity`
         *   `[TEST] ESAK IPI profile: BSP_ONLY`
+
+### Epoch III, Day 56: Day 12 Closure Ratification
+*   **What was changed:**
+    *   Added deterministic Day 12 closure markers in kernel boot self-tests:
+        *   `[TEST] Day 12 Fault Isolation: SUCCESS.`
+        *   `[TEST] Day 12 Rendezvous Contract: SUCCESS.`
+        *   `[TEST] Day 12 Reaper Lifecycle: SUCCESS.`
+        *   `[TEST] Day 12 Process Annihilation: SUCCESS.`
+    *   Added Day 12 marker gates to matrix harness:
+        *   `tools/run_law2_fate_matrix.sh`
+    *   Added Day 12 closure contract artifact:
+        *   `docs/components/day12/day12_closure_contract.md`
+*   **Why it was changed:**
+    *   To convert Day 12 from narrative completion into enforceable runtime closure criteria.
+    *   To align Day 12 evidence with Vision/Security/Performance governance used by current Epoch III closure slices.
+*   **Test Results:**
+    *   [PASS] `make -C user`
+    *   [PASS] `make -C kernel`
+    *   [PASS] `make -C kernel iso`
+    *   [PASS] `make -C kernel verify_matrix`
+    *   [PASS] Matrix serial confirms all required Day 12 markers.
+
+### Epoch III, Day 57: Day 13 Closure Ratification
+*   **What was changed:**
+    *   Added deterministic Day 13 closure markers in kernel boot self-tests:
+        *   `[TEST] Day 13 Extended-State Init: SUCCESS.`
+        *   `[TEST] Day 13 Context Preservation: SUCCESS.`
+        *   `[TEST] Day 13 Cross-Thread FPU Isolation: SUCCESS.`
+        *   `[TEST] Day 13 Crucible Stability: SUCCESS.`
+    *   Added explicit fail-closed corruption marker path in FPU crucible threads:
+        *   `[DAY13-FAIL]`
+    *   Added Day 13 matrix gates:
+        *   required Day 13 success markers
+        *   forbidden Day 13 failure marker
+    *   Added repeat-run Day 13 closure suite:
+        *   `tools/run_day13_closure_suite.sh`
+    *   Added Day 13 closure contract artifact:
+        *   `docs/components/day13/day13_closure_contract.md`
+*   **Why it was changed:**
+    *   To move Day 13 from historical claim to enforceable closure-grade runtime evidence.
+    *   To ensure FPU/SSE context corruption cannot remain silent in production validation paths.
+*   **Test Results:**
+    *   [PASS] `make -C user`
+    *   [PASS] `make -C kernel`
+    *   [PASS] `make -C kernel iso`
+    *   [PASS] `make -C kernel verify_matrix`
+    *   [PASS] `./tools/run_day13_closure_suite.sh --runs 5 --timeout 35 --iso kernel/reaper-os.iso --out-dir kernel`
+
+### Epoch III, Day 58: Day 14 Closure Ratification
+*   **What was changed:**
+    *   Added deterministic Day 14 closure markers in kernel boot self-tests:
+        *   `[TEST] Day 14 Wait Contract: SUCCESS.`
+        *   `[TEST] Day 14 Yield Gate: SUCCESS.`
+        *   `[TEST] Day 14 Lifecycle ABI Surface: SUCCESS.`
+    *   Added fail-closed Day 14 failure marker path:
+        *   `[DAY14-FAIL]`
+    *   Added Paradigm lifecycle probe marker path:
+        *   `PARADIGM: Lifecycle gate probe PASS.`
+        *   `PARADIGM: Lifecycle gate probe FAIL.`
+    *   Added Day 14 matrix required/forbidden marker gates.
+    *   Added repeat-run Day 14 closure suite:
+        *   `tools/run_day14_closure_suite.sh`
+    *   Added Day 14 closure contract artifact:
+        *   `docs/components/day14/day14_closure_contract.md`
+*   **Why it was changed:**
+    *   To convert Day 14 lifecycle claims into enforceable runtime closure criteria.
+    *   To ensure lifecycle syscall regressions are release-blocking through required/forbidden marker gates.
+*   **Test Results:**
+    *   [PASS] `make -C user`
+    *   [PASS] `make -C kernel`
+    *   [PASS] `make -C kernel iso`
+    *   [PASS] `make -C kernel verify_matrix`
+    *   [PASS] `./tools/run_day14_closure_suite.sh --runs 5 --timeout 35 --iso kernel/reaper-os.iso --out-dir kernel`
+
+### Epoch III, Day 59: Day 15 Closure Ratification
+*   **What was changed:**
+    *   Added deterministic Day 15 closure markers in Genesis bridge runtime path:
+        *   `[TEST] Day 15 Genesis Module Contract: SUCCESS.`
+        *   `[TEST] Day 15 Genesis Capability Injection: SUCCESS.`
+        *   `[TEST] Day 15 Bootinfo Bridge: SUCCESS.`
+    *   Added explicit fail-closed Day 15 marker path:
+        *   `[DAY15-FAIL]`
+    *   Added Paradigm genesis probe marker path:
+        *   `PARADIGM: Genesis bridge probe PASS.`
+        *   `PARADIGM: Genesis bridge probe FAIL.`
+    *   Extended matrix required/forbidden marker gates for Day 15.
+    *   Added repeat-run Day 15 closure suite:
+        *   `tools/run_day15_closure_suite.sh`
+    *   Added Day 15 closure contract artifact:
+        *   `docs/components/day15/day15_closure_contract.md`
+*   **Why it was changed:**
+    *   To convert Day 15 bridge behavior from historical claim into enforced final-product closure gates.
+    *   To ensure genesis bridge regressions are release-blocking through deterministic required/forbidden marker checks.
+*   **Test Results:**
+    *   [PASS] `make -C user`
+    *   [PASS] `make -C kernel`
+    *   [PASS] `make -C kernel iso`
+    *   [PASS] `make -C kernel verify_matrix` (3/3)
+    *   [PASS] `./tools/run_day15_closure_suite.sh --runs 5 --timeout 35 --iso kernel/reaper-os.iso --out-dir kernel` (5/5)
+
+### Epoch III, Day 60: Day 16 Closure Ratification
+*   **What was changed:**
+    *   Added deterministic Day 16 closure markers in Paradigm map/unmap probes:
+        *   `[TEST] Day 16 Capability-Scoped Mapping: SUCCESS.`
+        *   `[TEST] Day 16 Strict Rights Enforcement: SUCCESS.`
+        *   `[TEST] Day 16 Unmap/Remap Contract: SUCCESS.`
+    *   Added explicit fail-closed Day 16 marker path:
+        *   `[DAY16-FAIL]`
+    *   Extended matrix required/forbidden marker gates for Day 16.
+    *   Added repeat-run Day 16 closure suite:
+        *   `tools/run_day16_closure_suite.sh`
+    *   Fixed ISO rebuild freshness:
+        *   `kernel/reaper-os.iso` now depends on `../user/init.elf` in `kernel/Makefile`.
+    *   Added Day 16 closure contract artifact:
+        *   `docs/components/day16/day16_closure_contract.md`
+*   **Why it was changed:**
+    *   To convert Day 16 map/unmap behavior from historical claim into enforced final-product closure gates.
+    *   To ensure map rights and unmap lifecycle regressions become release-blocking through deterministic marker checks.
+*   **Test Results:**
+    *   [PASS] `make -C user`
+    *   [PASS] `make -C kernel`
+    *   [PASS] `make -C kernel iso`
+    *   [PASS] `make -C kernel verify_matrix` (3/3)
+    *   [PASS] `./tools/run_day16_closure_suite.sh --runs 5 --timeout 35 --iso kernel/reaper-os.iso --out-dir kernel` (5/5)
+
+### Epoch III, Day 61: Day 17 Closure Ratification
+*   **What was changed:**
+    *   Added deterministic Day 17 closure markers in kernel hardening self-tests:
+        *   `[TEST] Day 17 IRQ-Safe Spinlocks: SUCCESS.`
+        *   `[TEST] Day 17 Stack Canary Guard: SUCCESS.`
+        *   `[TEST] Day 17 Spurious IRQ Filter: SUCCESS.`
+    *   Added explicit fail-closed Day 17 marker path:
+        *   `[DAY17-FAIL]`
+    *   Added public declarations for spurious IRQ accounting probes:
+        *   `idt_note_spurious39`, `idt_note_spurious47` in `kernel/include/idt.h`
+    *   Extended matrix required/forbidden marker gates for Day 17.
+    *   Added repeat-run Day 17 closure suite:
+        *   `tools/run_day17_closure_suite.sh`
+    *   Added Day 17 closure contract artifact:
+        *   `docs/components/day17/day17_closure_contract.md`
+*   **Why it was changed:**
+    *   To convert Day 17 hardening behavior from historical claim into enforced final-product closure gates.
+    *   To ensure lock/canary/spurious-IRQ regressions are release-blocking through deterministic marker checks.
+*   **Test Results:**
+    *   [PASS] `make -C user`
+    *   [PASS] `make -C kernel`
+    *   [PASS] `make -C kernel iso`
+    *   [PASS] `make -C kernel verify_matrix` (3/3)
+    *   [PASS] `./tools/run_day17_closure_suite.sh --runs 5 --timeout 35 --iso kernel/reaper-os.iso --out-dir kernel` (5/5)
+
+### Epoch III, Day 62: Day 18 Closure Ratification
+*   **What was changed:**
+    *   Added deterministic Day 18 closure markers in ELF/bootstrap path:
+        *   `[TEST] Day 18 ELF Header Validation: SUCCESS.`
+        *   `[TEST] Day 18 ELF Loader Contract: SUCCESS.`
+        *   `[TEST] Day 18 Paradigm C Daemon Bootstrap: SUCCESS.`
+    *   Added explicit fail-closed Day 18 marker path:
+        *   `[DAY18-FAIL]`
+    *   Extended matrix required/forbidden marker gates for Day 18.
+    *   Added repeat-run Day 18 closure suite:
+        *   `tools/run_day18_closure_suite.sh`
+    *   Added Day 18 closure contract artifact:
+        *   `docs/components/day18/day18_closure_contract.md`
+*   **Why it was changed:**
+    *   To convert Day 18 ELF/bootstrap behavior from historical claim into enforced final-product closure gates.
+    *   To ensure ELF validation/loader/bootstrap regressions are release-blocking through deterministic marker checks.
+*   **Test Results:**
+    *   [PASS] `make -C user`
+    *   [PASS] `make -C kernel`
+    *   [PASS] `make -C kernel iso`
+    *   [PASS] `make -C kernel verify_matrix` (3/3)
+    *   [PASS] `./tools/run_day18_closure_suite.sh --runs 5 --timeout 35 --iso kernel/reaper-os.iso --out-dir kernel` (5/5)
+
+### Epoch III, Day 63: Day 19 Closure Ratification
+*   **What was changed:**
+    *   Hardened Day 19 mode-mask constants:
+        *   Added `CAP_MODE_VALID_MASK`.
+        *   Narrowed `CAP_MODE_ALL` to valid Law 4 mode bits only.
+    *   Added fail-closed mode-mask validation in capability core:
+        *   `cap_identity_create(...)` rejects zero/invalid masks.
+        *   `cap_mint(...)` rejects invalid masks and preserves mode monotonicity.
+        *   `cap_lookup(...)` fail-closes malformed identity masks.
+    *   Added fail-closed syscall boundary validation:
+        *   `SYS_CAP_MINT` rejects zero/invalid mode masks before `cap_mint(...)`.
+    *   Added deterministic Day 19 closure markers in kernel self-tests:
+        *   `[TEST] Day 19 Mode Mask Validation: SUCCESS.`
+        *   `[TEST] Day 19 Conditional Runes: SUCCESS.`
+        *   `[TEST] Day 19 Mint Monotonicity: SUCCESS.`
+    *   Added explicit fail marker path:
+        *   `[DAY19-FAIL]`
+    *   Extended matrix required/forbidden marker gates for Day 19.
+    *   Added repeat-run Day 19 closure suite:
+        *   `tools/run_day19_closure_suite.sh`
+    *   Added Day 19 closure contract artifact:
+        *   `docs/components/day19/day19_closure_contract.md`
+*   **Why it was changed:**
+    *   To convert Day 19 from historical implementation status into enforced final-product closure gates.
+    *   To guarantee fail-closed mode-mask behavior and deterministic Reality-gating evidence under matrix verification.
+*   **Test Results:**
+    *   [PASS] `make -C user`
+    *   [PASS] `make -C kernel`
+    *   [PASS] `make -C kernel iso`
+    *   [PASS] `make -C kernel verify_matrix` (3/3)
+    *   [PASS] `./tools/run_day19_closure_suite.sh --runs 5 --timeout 35 --iso kernel/reaper-os.iso --out-dir kernel` (5/5)
+
+### Epoch III, Day 64: Day 20 Closure Ratification
+*   **What was changed:**
+    *   Hardened Day 20 lattice create validation in `SYS_LATTICE_CREATE`:
+        *   strict page-count validation
+        *   strict source/listener non-zero + distinct topology checks
+    *   Hardened Day 20 lattice attach/detach validation:
+        *   requires lattice `CAP_RIGHT_READ`
+        *   rejects unaligned/invalid user-range attach addresses
+    *   Hardened process lattice attachment model:
+        *   rejects duplicate `(lattice, vaddr)` attaches
+        *   rejects overlapping lattice windows per process
+    *   Added deterministic Day 20 closure markers in Paradigm probes:
+        *   `[TEST] Day 20 Lattice Create Contract: SUCCESS.`
+        *   `[TEST] Day 20 Lattice Rights Contract: SUCCESS.`
+        *   `[TEST] Day 20 Lattice Lifecycle Contract: SUCCESS.`
+    *   Added explicit fail marker path:
+        *   `[DAY20-FAIL]`
+    *   Added explicit negative probes:
+        *   invalid broadcast topology rejection
+        *   unaligned attach rejection
+    *   Extended matrix required/forbidden marker gates for Day 20.
+    *   Added repeat-run Day 20 closure suite:
+        *   `tools/run_day20_closure_suite.sh`
+    *   Added Day 20 closure contract artifact:
+        *   `docs/components/day20/day20_closure_contract.md`
+*   **Why it was changed:**
+    *   To convert Day 20 lattice behavior from historical implementation status into enforced final-product closure gates.
+    *   To guarantee fail-closed lattice topology/rights/lifecycle behavior with deterministic matrix evidence.
+*   **Test Results:**
+    *   [PASS] `make -C user`
+    *   [PASS] `make -C kernel`
+    *   [PASS] `make -C kernel iso`
+    *   [PASS] `make -C kernel verify_matrix` (3/3)
+    *   [PASS] `./tools/run_day20_closure_suite.sh --runs 5 --timeout 35 --iso kernel/reaper-os.iso --out-dir kernel` (5/5)
+
+### Epoch III, Day 65: Day 21 Closure Ratification
+*   **What was changed:**
+    *   Hardened Day 21 Fate-read authority checks in `SYS_FATE_READ`:
+        *   requires `CAP_TYPE_AUDITOR`
+        *   requires `CAP_RIGHT_READ`
+    *   Hardened Day 21 kernel copy safety:
+        *   fail-closed if Fate copy count is negative or exceeds requested count
+    *   Added deterministic Day 21 closure markers in Paradigm audit probes:
+        *   `[TEST] Day 21 Auditor Access Contract: SUCCESS.`
+        *   `[TEST] Day 21 Fate Integrity Contract: SUCCESS.`
+        *   `[TEST] Day 21 Fault Forensics Contract: SUCCESS.`
+    *   Added explicit fail marker path:
+        *   `[DAY21-FAIL]`
+    *   Added explicit Day 21 negative probes:
+        *   non-auditor Fate read rejection
+        *   invalid read-mode rejection
+    *   Extended matrix required/forbidden marker gates for Day 21.
+    *   Added repeat-run Day 21 closure suite:
+        *   `tools/run_day21_closure_suite.sh`
+    *   Added Day 21 closure contract artifact:
+        *   `docs/components/day21/day21_closure_contract.md`
+*   **Why it was changed:**
+    *   To convert Day 21 auditing behavior from historical implementation status into enforced final-product closure gates.
+    *   To guarantee fail-closed auditor authority and deterministic forensic evidence checks under matrix validation.
+*   **Test Results:**
+    *   [PASS] `make -C user`
+    *   [PASS] `make -C kernel`
+    *   [PASS] `make -C kernel iso`
+    *   [PASS] `make -C kernel verify_matrix` (3/3)
+    *   [PASS] `./tools/run_day21_closure_suite.sh --runs 5 --timeout 35 --iso kernel/reaper-os.iso --out-dir kernel` (5/5)
+
+### Epoch III, Day 66: Day 22 Closure Ratification
+*   **What was changed:**
+    *   Added deterministic Day 22 closure markers in kernel lineage tests:
+        *   `[TEST] Day 22 Recursive Revocation Contract: SUCCESS.`
+        *   `[TEST] Day 22 Deep Derivation Contract: SUCCESS.`
+    *   Added explicit Day 22 fail marker path:
+        *   `[DAY22-FAIL]`
+    *   Extended matrix required/forbidden marker gates for Day 22.
+    *   Added repeat-run Day 22 closure suite:
+        *   `tools/run_day22_closure_suite.sh`
+    *   Added Day 22 closure contract artifact:
+        *   `docs/components/day22/day22_closure_contract.md`
+*   **Why it was changed:**
+    *   To convert Day 22 lineage/revocation behavior from historical implementation status into enforced final-product closure gates.
+    *   To eliminate Day 22 documentation drift and ensure matrix-backed release evidence.
+*   **Test Results:**
+    *   [PASS] `make -C user`
+    *   [PASS] `make -C kernel`
+    *   [PASS] `make -C kernel iso`
+    *   [PASS] `make -C kernel verify_matrix` (3/3)
+    *   [PASS] `./tools/run_day22_closure_suite.sh --runs 5 --timeout 35 --iso kernel/reaper-os.iso --out-dir kernel` (5/5)
+
+### Epoch III, Day 67: Day 23 Closure Ratification
+*   **What was changed:**
+    *   Added deterministic Day 23 closure marker in allocator self-test path:
+        *   `[TEST] Day 23 Foundation Allocator Contract: SUCCESS.`
+    *   Added explicit Day 23 fail marker path:
+        *   `[DAY23-FAIL]`
+    *   Extended matrix required/forbidden marker gates for Day 23.
+    *   Added repeat-run Day 23 closure suite:
+        *   `tools/run_day23_closure_suite.sh`
+    *   Added Day 23 closure contract artifact:
+        *   `docs/components/day23/day23_closure_contract.md`
+*   **Why it was changed:**
+    *   To close the historical Day 23 evidence gap with deterministic runtime governance.
+    *   To make allocator hardening regressions release-blocking via explicit marker gates.
+*   **Test Results:**
+    *   [PASS] `make -C user`
+    *   [PASS] `make -C kernel`
+    *   [PASS] `make -C kernel iso`
+    *   [PASS] `make -C kernel verify_matrix` (3/3)
+    *   [PASS] `./tools/run_day23_closure_suite.sh --runs 5 --timeout 35 --iso kernel/reaper-os.iso --out-dir kernel` (5/5)
+
+### Epoch III, Day 68: Day 24 Closure Ratification
+*   **What was changed:**
+    *   Added deterministic Day 24 closure markers in kernel PMM/Ocular probes:
+        *   `[TEST] Day 24 Foundation Hardening Contract: SUCCESS.`
+        *   `[TEST] Day 24 Ocular Projection Contract: SUCCESS.`
+    *   Added explicit Day 24 fail marker path:
+        *   `[DAY24-FAIL]`
+    *   Added Ocular readiness API:
+        *   `ocular_is_ready()`
+    *   Extended matrix required/forbidden marker gates for Day 24.
+    *   Added repeat-run Day 24 closure suite:
+        *   `tools/run_day24_closure_suite.sh`
+    *   Added Day 24 closure contract artifact:
+        *   `docs/components/day24/day24_closure_contract.md`
+*   **Why it was changed:**
+    *   To convert Day 24 foundation-hardening/Ocular behavior from historical claim into enforceable closure gates.
+    *   To make PMM/Law9/Ocular regressions release-blocking under deterministic matrix evidence.
+*   **Test Results:**
+    *   [PASS] `make -C user`
+    *   [PASS] `make -C kernel`
+    *   [PASS] `make -C kernel iso`
+    *   [PASS] `make -C kernel verify_matrix` (3/3)
+    *   [PASS] `./tools/run_day24_closure_suite.sh --runs 5 --timeout 35 --iso kernel/reaper-os.iso --out-dir kernel` (5/5)

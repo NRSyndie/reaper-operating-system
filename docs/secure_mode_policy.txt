@@ -1,0 +1,306 @@
+# Reaper-OS Security Mode: SECURE
+# Description: Active breach response - system under attack
+# Philosophy: Defend and contain, automatic protective measures
+# Trigger: Automatic on threat detection
+
+mode_name: secure
+mode_id: 2
+philosophy: "We're under attack - defend"
+default: false
+auto_activated: true
+
+# ============================================================================
+# NETWORK POLICY
+# ============================================================================
+network:
+  enabled: true  # Unlike Lockdown, network stays up
+  default_connection: vpn_required  # Force VPN
+  
+  vpn:
+    required: true
+    kill_switch: true  # Block all traffic if VPN drops
+    providers: [wireguard]  # Fastest, most secure
+    auto_reconnect: true
+    
+  tor:
+    available: true
+    optional: true
+    
+  firewall:
+    enabled: true
+    default_policy: deny_all
+    whitelist_mode: true
+    allowed_domains: []  # Populated dynamically
+    
+  protections:
+    dns_over_https: true
+    block_known_malicious_ips: true
+    block_tor_exit_nodes: true  # Can connect TO Tor, not FROM
+    rate_limiting: true
+    syn_flood_protection: true
+    
+  monitoring:
+    level: maximum
+    packet_capture: true
+    deep_packet_inspection: true
+    dns_queries: true
+    connection_tracking: true
+    
+  restrictions:
+    block_p2p: true
+    block_torrent: true
+    block_known_c2_servers: true
+
+# ============================================================================
+# FILESYSTEM POLICY
+# ============================================================================
+filesystem:
+  read_only_paths:
+    - /boot
+    - /etc/passwd
+    - /etc/shadow
+    - /var/lib/reaper
+    
+  executable_verification:
+    required: true
+    require_signature: false  # Not all packages signed
+    require_origin: true
+    require_checksum: true
+    block_unknown_origin: true
+    
+  writable_locations:
+    - /home  # Still writable but monitored
+    - /tmp   # Writable but no execution
+    
+  mount_policy:
+    allow_new_mounts: false
+    allow_removable_media: true
+    auto_mount_usb: false
+    usb_mode: read_only  # Can read, cannot write
+    
+  file_monitoring:
+    critical_files: [/etc/passwd, /etc/shadow, /boot, /usr/bin, /usr/sbin]
+    alert_on_modification: true
+    log_all_writes: true
+    block_modifications: [/boot, /etc/passwd, /etc/shadow]
+    
+  suspicious_files:
+    action: quarantine
+    quarantine_path: /var/quarantine
+    
+  tmp_restrictions:
+    no_execute: true  # Files in /tmp cannot be executed
+
+# ============================================================================
+# PROCESS POLICY
+# ============================================================================
+process:
+  execution_restrictions:
+    allow_unverified: false
+    require_origin: true
+    require_verification: true
+    
+  resource_limits:
+    enabled: true
+    max_cpu_percent: 50
+    max_memory_mb: 2048
+    max_processes_per_user: 100
+    
+  process_isolation:
+    enabled: true  # Automatic sandboxing
+    trust_level: low
+    
+  suspicious_behavior:
+    monitoring: active
+    action: quarantine  # Don't kill, but isolate
+    
+    triggers:
+      - network_connection_attempt
+      - privilege_escalation
+      - parent_process_mismatch
+      - rapid_process_spawning
+      - syscall_anomaly
+      
+  whitelist:
+    core_daemons: always_allowed
+    system_processes: always_allowed
+    user_applications: require_approval
+    
+  debuggers:
+    allowed: false
+  
+  ptrace:
+    allowed: false
+
+# ============================================================================
+# HARDWARE POLICY
+# ============================================================================
+hardware:
+  usb:
+    allow_devices: true
+    auto_mount_storage: false
+    require_approval_new_devices: true
+    block_hid_injection: true
+    block_storage_write: true
+    
+  peripherals:
+    webcam:
+      enabled: true
+      require_per_use_approval: true
+      indicator_required: true
+      
+    microphone:
+      enabled: true
+      require_per_use_approval: true
+      
+    bluetooth:
+      enabled: false
+      
+  firmware_updates:
+    allowed: false  # Prevent firmware-level attacks
+
+# ============================================================================
+# PRIVILEGE POLICY
+# ============================================================================
+privileges:
+  sudo:
+    enabled: true
+    require_password: true
+    require_2fa: true  # Additional security
+    timeout_minutes: 1  # Very short timeout
+    log_all_commands: true
+    
+  root_access:
+    allowed: true
+    require_justification: true  # Must explain why
+    audit_all_actions: true
+    alert_on_use: true
+    
+  setuid_binaries:
+    allowed: true
+    whitelist_only: true
+    
+  polkit:
+    enabled: true
+    deny_by_default: true
+
+# ============================================================================
+# MONITORING POLICY
+# ============================================================================
+monitoring:
+  logging_level: enhanced
+  
+  log_categories:
+    authentication: true
+    network_connections: true
+    file_modifications: true
+    process_execution: true
+    syscalls: false  # Too much data
+    privilege_escalations: true
+    
+  retention:
+    days: 90
+    compress_after_days: 1
+    never_delete_security_events: true
+    
+  alerting:
+    immediate_alerts:
+      - any_network_activity
+      - any_file_modification
+      - process_killed
+      - unverified_execution
+      - privilege_attempt
+      - usb_device_inserted
+      
+  snapshots:
+    enabled: true
+    interval_minutes: 5
+    keep_last_n: 12  # 1 hour of history
+
+# ============================================================================
+# CRYPTOGRAPHY POLICY
+# ============================================================================
+crypto:
+  enforce_encryption:
+    new_files: true
+    all_network_traffic: true
+    
+  vault:
+    auto_lock: true
+    timeout_minutes: 5
+    
+  clipboard:
+    enabled: true
+    clear_passwords_after_seconds: 30
+    log_clipboard_use: true
+    
+  swap_encryption:
+    required: true
+
+# ============================================================================
+# AUTOMATIC ESCALATION TRIGGERS
+# ============================================================================
+escalation:
+  to_lockdown:
+    triggers:
+      - threat_persists_for_minutes: 5
+      - multiple_suspicious_processes: 3
+      - core_daemon_compromise
+      - repeated_privilege_escalation_attempts: 3
+      
+  de_escalation:
+    to_casual:
+      conditions:
+        - threat_resolved: true
+        - clean_operation_hours: 24
+        - user_confirmation: required
+
+# ============================================================================
+# USER EXPERIENCE
+# ============================================================================
+ui:
+  visual_indicator:
+    border_color: yellow
+    icon: 🟡
+    overlay: subtle_yellow_corner
+    
+  notifications:
+    priority: high
+    sound: true
+    show_all_actions: true
+    
+  restrictions_notice:
+    show_on_mode_enter: true
+    message: |
+      ⚠️ SECURE MODE ACTIVATED
+      
+      Reason: {trigger_reason}
+      
+      Enhanced security measures active:
+      ✓ All traffic through VPN
+      ✓ USB devices read-only  
+      ✓ Privileged operations require 2FA
+      ✓ Enhanced monitoring active
+      
+      System will return to normal after:
+      └─ 24 hours of clean operation
+      
+      Manual exit: reaper mode casual
+
+# ============================================================================
+# THREAT RESPONSE
+# ============================================================================
+threat_response:
+  on_detection:
+    - quarantine_suspicious_process
+    - capture_memory_snapshot
+    - log_all_network_connections
+    - notify_user
+    - increase_monitoring
+    
+  on_persistence:
+    - escalate_to_lockdown
+    
+  forensics:
+    save_evidence: true
+    evidence_path: /var/lib/reaper/forensics

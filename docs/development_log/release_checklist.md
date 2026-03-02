@@ -68,3 +68,120 @@ Use this checklist for every implementation day before declaring completion.
 - [ ] Scheduler metrics ABI (`SYS_SCHED_METRICS`) includes expanded ESAK counters.
 - [ ] Fate-compatible scheduler security events are observable (deny/revoke/budget paths).
 - [ ] Product profile is explicit (`[TEST] ESAK IPI profile: BSP_ONLY` or validated SMP IPI activation evidence).
+
+## 9. Day 12 Closure Ratification Gates
+- [ ] Day 12 closure contract reviewed: `docs/components/day12/day12_closure_contract.md`
+- [ ] Runtime marker `[TEST] Day 12 Fault Isolation: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 12 Rendezvous Contract: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 12 Reaper Lifecycle: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 12 Process Annihilation: SUCCESS.` present.
+- [ ] Vision/Security/Performance review artifacts captured in day closure report.
+
+## 10. Day 13 Closure Ratification Gates
+- [ ] Day 13 closure contract reviewed: `docs/components/day13/day13_closure_contract.md`
+- [ ] Runtime marker `[TEST] Day 13 Extended-State Init: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 13 Context Preservation: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 13 Cross-Thread FPU Isolation: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 13 Crucible Stability: SUCCESS.` present.
+- [ ] Forbidden marker `[DAY13-FAIL]` absent from matrix serial logs.
+- [ ] Repeat-run closure gate passes: `./tools/run_day13_closure_suite.sh`.
+- [ ] Vision/Security/Performance review artifacts captured in day closure report.
+
+## 11. Day 14 Closure Ratification Gates
+- [ ] Day 14 closure contract reviewed: `docs/components/day14/day14_closure_contract.md`
+- [ ] Runtime marker `[TEST] Day 14 Wait Contract: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 14 Yield Gate: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 14 Lifecycle ABI Surface: SUCCESS.` present.
+- [ ] Runtime marker `PARADIGM: Lifecycle gate probe PASS.` present.
+- [ ] Forbidden marker `[DAY14-FAIL]` absent from matrix serial logs.
+- [ ] Forbidden marker `PARADIGM: Lifecycle gate probe FAIL.` absent from matrix serial logs.
+- [ ] Repeat-run closure gate passes: `./tools/run_day14_closure_suite.sh`.
+- [ ] Vision/Security/Performance review artifacts captured in day closure report.
+
+## 12. Day 15 Closure Ratification Gates
+- [ ] Day 15 closure contract reviewed: `docs/components/day15/day15_closure_contract.md`
+- [ ] Runtime marker `[TEST] Day 15 Genesis Module Contract: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 15 Genesis Capability Injection: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 15 Bootinfo Bridge: SUCCESS.` present.
+- [ ] Runtime marker `PARADIGM: Genesis bridge probe PASS.` present.
+- [ ] Forbidden marker `[DAY15-FAIL]` absent from matrix serial logs.
+- [ ] Forbidden marker `PARADIGM: Genesis bridge probe FAIL.` absent from matrix serial logs.
+- [ ] Repeat-run closure gate passes: `./tools/run_day15_closure_suite.sh`.
+- [ ] Vision/Security/Performance review artifacts captured in day closure report.
+
+## 13. Day 16 Closure Ratification Gates
+- [ ] Day 16 closure contract reviewed: `docs/components/day16/day16_closure_contract.md`
+- [ ] Runtime marker `[TEST] Day 16 Capability-Scoped Mapping: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 16 Strict Rights Enforcement: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 16 Unmap/Remap Contract: SUCCESS.` present.
+- [ ] Forbidden marker `[DAY16-FAIL]` absent from matrix serial logs.
+- [ ] Repeat-run closure gate passes: `./tools/run_day16_closure_suite.sh`.
+- [ ] Vision/Security/Performance review artifacts captured in day closure report.
+
+## 14. Day 17 Closure Ratification Gates
+- [ ] Day 17 closure contract reviewed: `docs/components/day17/day17_closure_contract.md`
+- [ ] Runtime marker `[TEST] Day 17 IRQ-Safe Spinlocks: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 17 Stack Canary Guard: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 17 Spurious IRQ Filter: SUCCESS.` present.
+- [ ] Forbidden marker `[DAY17-FAIL]` absent from matrix serial logs.
+- [ ] Repeat-run closure gate passes: `./tools/run_day17_closure_suite.sh`.
+- [ ] Vision/Security/Performance review artifacts captured in day closure report.
+
+## 15. Day 18 Closure Ratification Gates
+- [ ] Day 18 closure contract reviewed: `docs/components/day18/day18_closure_contract.md`
+- [ ] Runtime marker `[TEST] Day 18 ELF Header Validation: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 18 ELF Loader Contract: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 18 Paradigm C Daemon Bootstrap: SUCCESS.` present.
+- [ ] Forbidden marker `[DAY18-FAIL]` absent from matrix serial logs.
+- [ ] Repeat-run closure gate passes: `./tools/run_day18_closure_suite.sh`.
+- [ ] Vision/Security/Performance review artifacts captured in day closure report.
+
+## 16. Day 19 Closure Ratification Gates
+- [ ] Day 19 closure contract reviewed: `docs/components/day19/day19_closure_contract.md`
+- [ ] Runtime marker `[TEST] Day 19 Mode Mask Validation: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 19 Conditional Runes: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 19 Mint Monotonicity: SUCCESS.` present.
+- [ ] Forbidden marker `[DAY19-FAIL]` absent from matrix serial logs.
+- [ ] Repeat-run closure gate passes: `./tools/run_day19_closure_suite.sh`.
+- [ ] Vision/Security/Performance review artifacts captured in day closure report.
+
+## 17. Day 20 Closure Ratification Gates
+- [ ] Day 20 closure contract reviewed: `docs/components/day20/day20_closure_contract.md`
+- [ ] Runtime marker `[TEST] Day 20 Lattice Create Contract: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 20 Lattice Rights Contract: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 20 Lattice Lifecycle Contract: SUCCESS.` present.
+- [ ] Forbidden marker `[DAY20-FAIL]` absent from matrix serial logs.
+- [ ] Repeat-run closure gate passes: `./tools/run_day20_closure_suite.sh`.
+- [ ] Vision/Security/Performance review artifacts captured in day closure report.
+
+## 18. Day 21 Closure Ratification Gates
+- [ ] Day 21 closure contract reviewed: `docs/components/day21/day21_closure_contract.md`
+- [ ] Runtime marker `[TEST] Day 21 Auditor Access Contract: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 21 Fate Integrity Contract: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 21 Fault Forensics Contract: SUCCESS.` present.
+- [ ] Forbidden marker `[DAY21-FAIL]` absent from matrix serial logs.
+- [ ] Repeat-run closure gate passes: `./tools/run_day21_closure_suite.sh`.
+- [ ] Vision/Security/Performance review artifacts captured in day closure report.
+
+## 19. Day 22 Closure Ratification Gates
+- [ ] Day 22 closure contract reviewed: `docs/components/day22/day22_closure_contract.md`
+- [ ] Runtime marker `[TEST] Day 22 Recursive Revocation Contract: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 22 Deep Derivation Contract: SUCCESS.` present.
+- [ ] Forbidden marker `[DAY22-FAIL]` absent from matrix serial logs.
+- [ ] Repeat-run closure gate passes: `./tools/run_day22_closure_suite.sh`.
+- [ ] Vision/Security/Performance review artifacts captured in day closure report.
+
+## 20. Day 23 Closure Ratification Gates
+- [ ] Day 23 closure contract reviewed: `docs/components/day23/day23_closure_contract.md`
+- [ ] Runtime marker `[TEST] Day 23 Foundation Allocator Contract: SUCCESS.` present.
+- [ ] Forbidden marker `[DAY23-FAIL]` absent from matrix serial logs.
+- [ ] Repeat-run closure gate passes: `./tools/run_day23_closure_suite.sh`.
+- [ ] Vision/Security/Performance review artifacts captured in day closure report.
+
+## 21. Day 24 Closure Ratification Gates
+- [ ] Day 24 closure contract reviewed: `docs/components/day24/day24_closure_contract.md`
+- [ ] Runtime marker `[TEST] Day 24 Foundation Hardening Contract: SUCCESS.` present.
+- [ ] Runtime marker `[TEST] Day 24 Ocular Projection Contract: SUCCESS.` present.
+- [ ] Forbidden marker `[DAY24-FAIL]` absent from matrix serial logs.
+- [ ] Repeat-run closure gate passes: `./tools/run_day24_closure_suite.sh`.
+- [ ] Vision/Security/Performance review artifacts captured in day closure report.

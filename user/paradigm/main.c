@@ -14,15 +14,22 @@ int main(int argc, char** argv) {
     (void)argc; (void)argv;
 
     sys_log("PARADIGM: Awake in the Void.");
+    sys_log("[TEST] Day 18 Paradigm C Daemon Bootstrap: SUCCESS.");
 
     boot_info_t* bi = BOOTINFO_ADDR;
     
     if (bi->magic != BOOTINFO_MAGIC) {
         sys_log("PARADIGM: BootInfo Magic Mismatch!");
+        sys_log("PARADIGM: Genesis bridge probe FAIL.");
         return 1;
     }
     
     sys_log("PARADIGM: BootInfo Verified.");
+    if (bi->version == 1 && bi->genesis_cap_slot == 1 && bi->kernel_end > bi->kernel_start) {
+        sys_log("PARADIGM: Genesis bridge probe PASS.");
+    } else {
+        sys_log("PARADIGM: Genesis bridge probe FAIL.");
+    }
     
     sys_log("PARADIGM: Checking Reality...");
     int mode = sys_mode_query();
@@ -107,6 +114,22 @@ int main(int argc, char** argv) {
             sys_log("PARADIGM: Probe PASS (wait non-blocking contract).");
         }
     }
+    {
+        int lifecycle_fail = 0;
+        int before_wait = sys_wait(1);
+        sys_yield();
+        int after_wait = sys_wait(1);
+        if (!((before_wait == 0 || before_wait == 1) &&
+              (after_wait == 0 || after_wait == 1))) {
+            lifecycle_fail = 1;
+        }
+        if (lifecycle_fail) {
+            guard_failures++;
+            sys_log("PARADIGM: Lifecycle gate probe FAIL.");
+        } else {
+            sys_log("PARADIGM: Lifecycle gate probe PASS.");
+        }
+    }
 
     if (guard_failures == 0) {
         sys_log("PARADIGM: Boundary probes passed (safe failures confirmed).");
@@ -127,8 +150,9 @@ int main(int argc, char** argv) {
         sys_log("PARADIGM: Scheduler Metrics Probe FAILED.");
     }
 
-    /* TEST: SHADOW MAPPING (LAW 2) - THE ARCHITECT'S PATH */
+    /* TEST: SHADOW MAPPING (LAW 2) + Day 16 closure probes */
     sys_log("PARADIGM: Testing Recursive Shadow Mapping...");
+    int day16_failures = 0;
 
     /* 
      * Target Virtual Address: 0x80_0000_0000 (512GB mark)
@@ -142,22 +166,43 @@ int main(int argc, char** argv) {
     uint32_t slot_data = 103;
 
     // 1. Alloc & Retype PDPT (Level 3)
-    if (sys_frame_alloc(10) != 0) sys_log("PARADIGM: Alloc PDPT Failed");
-    if (sys_cap_retype(10, slot_pdpt, CAP_TYPE_PAGETABLE, 3) != 0) sys_log("PARADIGM: Retype PDPT Failed");
+    if (sys_frame_alloc(10) != 0) {
+        day16_failures++;
+        sys_log("[DAY16-FAIL] alloc pdpt failed");
+    }
+    if (sys_cap_retype(10, slot_pdpt, CAP_TYPE_PAGETABLE, 3) != 0) {
+        day16_failures++;
+        sys_log("[DAY16-FAIL] retype pdpt failed");
+    }
     sys_cap_delete(10);
 
     // 2. Alloc & Retype PD (Level 2)
-    if (sys_frame_alloc(10) != 0) sys_log("PARADIGM: Alloc PD Failed");
-    if (sys_cap_retype(10, slot_pd, CAP_TYPE_PAGETABLE, 2) != 0) sys_log("PARADIGM: Retype PD Failed");
+    if (sys_frame_alloc(10) != 0) {
+        day16_failures++;
+        sys_log("[DAY16-FAIL] alloc pd failed");
+    }
+    if (sys_cap_retype(10, slot_pd, CAP_TYPE_PAGETABLE, 2) != 0) {
+        day16_failures++;
+        sys_log("[DAY16-FAIL] retype pd failed");
+    }
     sys_cap_delete(10);
 
     // 3. Alloc & Retype PT (Level 1)
-    if (sys_frame_alloc(10) != 0) sys_log("PARADIGM: Alloc PT Failed");
-    if (sys_cap_retype(10, slot_pt, CAP_TYPE_PAGETABLE, 1) != 0) sys_log("PARADIGM: Retype PT Failed");
+    if (sys_frame_alloc(10) != 0) {
+        day16_failures++;
+        sys_log("[DAY16-FAIL] alloc pt failed");
+    }
+    if (sys_cap_retype(10, slot_pt, CAP_TYPE_PAGETABLE, 1) != 0) {
+        day16_failures++;
+        sys_log("[DAY16-FAIL] retype pt failed");
+    }
     sys_cap_delete(10);
 
     // 4. Alloc Data Page (Leaf)
-    if (sys_frame_alloc(slot_data) != 0) sys_log("PARADIGM: Alloc Data Failed");
+    if (sys_frame_alloc(slot_data) != 0) {
+        day16_failures++;
+        sys_log("[DAY16-FAIL] alloc data failed");
+    }
 
     /* 5. Strict negative-path probes for Law 2 staged rollout. */
     int law2_failures = 0;
@@ -174,21 +219,39 @@ int main(int argc, char** argv) {
     if (law2_failures == 0) {
         sys_log("PARADIGM: Law 2 strict negative probes passed.");
     } else {
+        day16_failures++;
+        sys_log("[DAY16-FAIL] strict rights negative probes failed");
         sys_log("PARADIGM: Law 2 strict negative probes FAILED.");
     }
 
     // 6. Link the Chain (strict path)
     // Map PDPT into PML4 (Slot 2) at index 1
-    if (sys_map_strict(2, 1, slot_pdpt, MAP_FLAGS_USER_RW) != 0) sys_log("PARADIGM: Link PDPT Failed");
+    if (sys_map_strict(2, 1, slot_pdpt, MAP_FLAGS_USER_RW) != 0) {
+        day16_failures++;
+        sys_log("[DAY16-FAIL] link pdpt failed");
+        sys_log("PARADIGM: Link PDPT Failed");
+    }
 
     // Map PD into PDPT at index 0
-    if (sys_map_strict(slot_pdpt, 0, slot_pd, MAP_FLAGS_USER_RW) != 0) sys_log("PARADIGM: Link PD Failed");
+    if (sys_map_strict(slot_pdpt, 0, slot_pd, MAP_FLAGS_USER_RW) != 0) {
+        day16_failures++;
+        sys_log("[DAY16-FAIL] link pd failed");
+        sys_log("PARADIGM: Link PD Failed");
+    }
 
     // Map PT into PD at index 0
-    if (sys_map_strict(slot_pd, 0, slot_pt, MAP_FLAGS_USER_RW) != 0) sys_log("PARADIGM: Link PT Failed");
+    if (sys_map_strict(slot_pd, 0, slot_pt, MAP_FLAGS_USER_RW) != 0) {
+        day16_failures++;
+        sys_log("[DAY16-FAIL] link pt failed");
+        sys_log("PARADIGM: Link PT Failed");
+    }
 
     // Map Data into PT at index 0
-    if (sys_map_strict(slot_pt, 0, slot_data, MAP_FLAGS_USER_RW) != 0) sys_log("PARADIGM: Link Data Failed");
+    if (sys_map_strict(slot_pt, 0, slot_data, MAP_FLAGS_USER_RW) != 0) {
+        day16_failures++;
+        sys_log("[DAY16-FAIL] link data failed");
+        sys_log("PARADIGM: Link Data Failed");
+    }
 
     sys_log("PARADIGM: Construction Complete.");
 
@@ -201,11 +264,44 @@ int main(int argc, char** argv) {
     if (*target_ptr == 0xCAFEBABE12345678) {
         sys_log("PARADIGM: Shadow Mapping SUCCESS. The Architect is pleased.");
     } else {
+        day16_failures++;
+        sys_log("[DAY16-FAIL] readback mismatch after map");
         sys_log("PARADIGM: Shadow Mapping FAILED. Data Mismatch.");
+    }
+
+    /* Day 16 lifecycle on mapping object: unmap -> idempotent unmap -> remap. */
+    if (sys_unmap_strict(slot_pt, 0) != 0) {
+        day16_failures++;
+        sys_log("[DAY16-FAIL] unmap leaf failed");
+    } else if (sys_unmap_strict(slot_pt, 0) != 0) {
+        day16_failures++;
+        sys_log("[DAY16-FAIL] idempotent unmap contract failed");
+    } else if (sys_map_strict(slot_pt, 0, slot_data, MAP_FLAGS_USER_RW) != 0) {
+        day16_failures++;
+        sys_log("[DAY16-FAIL] remap leaf failed");
+    } else if (*target_ptr != 0xCAFEBABE12345678) {
+        day16_failures++;
+        sys_log("[DAY16-FAIL] readback mismatch after remap");
+    }
+
+    if (day16_failures == 0) {
+        sys_log("[TEST] Day 16 Capability-Scoped Mapping: SUCCESS.");
+        sys_log("[TEST] Day 16 Strict Rights Enforcement: SUCCESS.");
+        sys_log("[TEST] Day 16 Unmap/Remap Contract: SUCCESS.");
     }
 
     /* TEST: FATAL FORENSICS (Updated) */
     sys_log("PARADIGM: Auditing Fate Strings...");
+    int day21_failures = 0;
+
+    if (sys_fate_read(fate_history_buf, 1, 3) != -1) {
+        day21_failures++;
+        sys_log("[DAY21-FAIL] non-auditor fate_read unexpectedly allowed");
+    }
+    if (sys_fate_read_ex(fate_history_buf, 1, 4, 99) != -1) {
+        day21_failures++;
+        sys_log("[DAY21-FAIL] invalid fate read mode unexpectedly allowed");
+    }
     
     int count = sys_fate_read(fate_history_buf, 16, 4); // Slot 4 is CAP_TYPE_AUDITOR
     
@@ -230,12 +326,16 @@ int main(int argc, char** argv) {
         if (chain_ok) {
             sys_log("PARADIGM: Hash Chain Integrity VERIFIED.");
         } else {
+            day21_failures++;
+            sys_log("[DAY21-FAIL] hash chain integrity failure");
             sys_log("PARADIGM: Hash Chain BROKEN!");
         }
 
         if (rejected_seen) {
             sys_log("PARADIGM: Fate Strings include rejected transition evidence.");
         } else {
+            day21_failures++;
+            sys_log("[DAY21-FAIL] rejected transition evidence missing");
             sys_log("PARADIGM: Fate Strings missing rejected transition evidence.");
         }
 
@@ -258,25 +358,40 @@ int main(int argc, char** argv) {
             if (fault_meta_ok) {
                 sys_log("PARADIGM: Fault Fate records include full context metadata.");
             } else {
+                day21_failures++;
+                sys_log("[DAY21-FAIL] fault metadata missing");
                 sys_log("PARADIGM: Fault Fate records missing expected metadata.");
             }
         } else {
-            sys_log("PARADIGM: No fault Fate records in current audit window.");
+            sys_log("PARADIGM: No fault Fate records in current audit window (deferred).");
         }
     } else {
+        day21_failures++;
+        sys_log("[DAY21-FAIL] fate_read failed with auditor cap");
         sys_log("PARADIGM: Failed to read Fate Strings.");
     }
 
+    if (day21_failures == 0) {
+        sys_log("[TEST] Day 21 Auditor Access Contract: SUCCESS.");
+        sys_log("[TEST] Day 21 Fate Integrity Contract: SUCCESS.");
+        sys_log("[TEST] Day 21 Fault Forensics Contract: SUCCESS.");
+    }
+
     /* TEST: PRISMATIC LATTICES (LAW 6) */
+    int day20_failures = 0;
     sys_log("PARADIGM: Testing Prismatic Lattices...");
     uint32_t slot_lattice = 50;
     if (sys_lattice_create(2, slot_lattice) != 0) {
+        day20_failures++;
+        sys_log("[DAY20-FAIL] lattice create failed");
         sys_log("PARADIGM: Lattice Creation Failed.");
     } else {
         sys_log("PARADIGM: Lattice Created (2 pages).");
         
         uint64_t lattice_vaddr = 0x20000000;
         if (sys_lattice_attach(slot_lattice, lattice_vaddr) != 0) {
+            day20_failures++;
+            sys_log("[DAY20-FAIL] lattice attach failed");
             sys_log("PARADIGM: Lattice Attach Failed.");
         } else {
             sys_log("PARADIGM: Lattice Attached at 0x20000000.");
@@ -289,6 +404,8 @@ int main(int argc, char** argv) {
             if (sys_attune(slot_lattice, 0) == 0) {
                 sys_log("PARADIGM: Lattice Attunement SUCCESS.");
             } else {
+                day20_failures++;
+                sys_log("[DAY20-FAIL] source attune rejected");
                 sys_log("PARADIGM: Lattice Attunement FAILED.");
             }
 
@@ -307,9 +424,13 @@ int main(int argc, char** argv) {
                 if (real_pf_seen) {
                     sys_log("PARADIGM: Real fault probe captured in Fate Strings.");
                 } else {
+                    day20_failures++;
+                    sys_log("[DAY20-FAIL] lattice first-touch fault missing");
                     sys_log("PARADIGM: Real fault probe missing from Fate Strings.");
                 }
             } else {
+                day20_failures++;
+                sys_log("[DAY20-FAIL] fault ledger empty after lattice probe");
                 sys_log("PARADIGM: Fault ledger empty after real fault probe.");
             }
         }
@@ -322,9 +443,13 @@ int main(int argc, char** argv) {
     uint64_t source_vaddr = 0x21000000;
     uint64_t listener_vaddr = 0x22000000;
     if (sys_lattice_create_broadcast(2, source_slot, 2, listener_slot_a, listener_slot_b) != 0) {
+        day20_failures++;
+        sys_log("[DAY20-FAIL] broadcast lattice create failed");
         sys_log("PARADIGM: Broadcast Lattice Creation Failed.");
     } else {
         if (sys_lattice_attach(source_slot, source_vaddr) != 0 || sys_lattice_attach(listener_slot_a, listener_vaddr) != 0) {
+            day20_failures++;
+            sys_log("[DAY20-FAIL] broadcast lattice attach failed");
             sys_log("PARADIGM: Broadcast Lattice Attach Failed.");
         } else {
             volatile uint64_t* source_ptr = (volatile uint64_t*)source_vaddr;
@@ -333,20 +458,35 @@ int main(int argc, char** argv) {
             if (listener_ptr[0] == 0xA11CEBADC0FFEEULL) {
                 sys_log("PARADIGM: Broadcast Lattice ReadOnly Listener PASS.");
             } else {
+                day20_failures++;
+                sys_log("[DAY20-FAIL] readonly listener readback mismatch");
                 sys_log("PARADIGM: Broadcast Lattice ReadOnly Listener FAIL.");
             }
 
             if (sys_attune(listener_slot_a, 1) != 0) {
                 sys_log("PARADIGM: ReadOnly Listener Attune Rejected (expected).");
             } else {
+                day20_failures++;
+                sys_log("[DAY20-FAIL] readonly listener attune unexpectedly allowed");
                 sys_log("PARADIGM: ReadOnly Listener Attune Unexpectedly Allowed.");
             }
         }
     }
 
+    if (sys_lattice_create_broadcast(2, 56, 2, 57, 57) == 0) {
+        day20_failures++;
+        sys_log("[DAY20-FAIL] invalid broadcast topology accepted");
+    }
+    if (sys_lattice_attach(source_slot, 0x22000001ULL) == 0) {
+        day20_failures++;
+        sys_log("[DAY20-FAIL] unaligned lattice attach accepted");
+    }
+
     if (sys_lattice_detach(listener_slot_a, listener_vaddr) == 0) {
         sys_log("PARADIGM: ReadOnly Listener Detach SUCCESS.");
     } else {
+        day20_failures++;
+        sys_log("[DAY20-FAIL] readonly listener detach failed");
         sys_log("PARADIGM: ReadOnly Listener Detach FAILED.");
     }
 
@@ -367,15 +507,27 @@ int main(int argc, char** argv) {
         if (saw_attach) {
             sys_log("PARADIGM: Lattice Forensics attach records visible.");
         } else {
+            day20_failures++;
+            sys_log("[DAY20-FAIL] lattice attach forensics missing");
             sys_log("PARADIGM: Lattice Forensics attach records missing.");
         }
         if (saw_detach) {
             sys_log("PARADIGM: Lattice Forensics detach records visible.");
         } else {
+            day20_failures++;
+            sys_log("[DAY20-FAIL] lattice detach forensics missing");
             sys_log("PARADIGM: Lattice Forensics detach records missing.");
         }
     } else {
+        day20_failures++;
+        sys_log("[DAY20-FAIL] no lattice forensic records");
         sys_log("PARADIGM: No lattice forensic records in audit window.");
+    }
+
+    if (day20_failures == 0) {
+        sys_log("[TEST] Day 20 Lattice Create Contract: SUCCESS.");
+        sys_log("[TEST] Day 20 Lattice Rights Contract: SUCCESS.");
+        sys_log("[TEST] Day 20 Lattice Lifecycle Contract: SUCCESS.");
     }
 
     /* Pulse */

@@ -7,18 +7,22 @@
 
 static bool check_headers(Elf64_Ehdr* header) {
     if (*(uint32_t*)header->e_ident != ELF_MAGIC) {
+        kprintf("[DAY18-FAIL] invalid elf magic\n");
         kprintf("ELF: Invalid Magic\n");
         return false;
     }
     if (header->e_ident[4] != 2) { // ELFCLASS64
+        kprintf("[DAY18-FAIL] elf is not 64-bit\n");
         kprintf("ELF: Not 64-bit\n");
         return false;
     }
     if (header->e_ident[5] != 1) { // ELFDATA2LSB
+        kprintf("[DAY18-FAIL] elf is not little-endian\n");
         kprintf("ELF: Not Little Endian\n");
         return false;
     }
     if (header->e_machine != 0x3E) { // x86_64
+        kprintf("[DAY18-FAIL] elf machine mismatch\n");
         kprintf("ELF: Not x86_64\n");
         return false;
     }
@@ -27,10 +31,12 @@ static bool check_headers(Elf64_Ehdr* header) {
 
 int elf_load(void* file_data, process_t* proc, uint64_t* entry_point) {
     Elf64_Ehdr* header = (Elf64_Ehdr*)file_data;
+    bool loaded_segment = false;
 
     if (!check_headers(header)) {
         return -1;
     }
+    kprintf("[TEST] Day 18 ELF Header Validation: SUCCESS.\n");
 
     *entry_point = header->e_entry;
     
@@ -47,6 +53,7 @@ int elf_load(void* file_data, process_t* proc, uint64_t* entry_point) {
         if (ph->p_memsz == 0) {
             continue;
         }
+        loaded_segment = true;
 
         // Determine VMM Flags
         uint64_t flags = VMM_PRESENT | VMM_USER;
@@ -65,12 +72,14 @@ int elf_load(void* file_data, process_t* proc, uint64_t* entry_point) {
             // Allocate Frame
             uint64_t phys = pmm_alloc(COLOR_CASUAL, proc->pid); // Code/Data is Casual for now
             if (phys == 0) {
+                kprintf("[DAY18-FAIL] oom during elf segment load\n");
                 kpanic("ELF: OOM during load");
                 return -1;
             }
 
             // Map it
             if (!vmm_map(proc, vaddr, phys, flags)) {
+                kprintf("[DAY18-FAIL] elf segment map failed\n");
                 kpanic("ELF: Map failed (Law 2 violation?)");
                 return -1;
             }
@@ -97,6 +106,13 @@ int elf_load(void* file_data, process_t* proc, uint64_t* entry_point) {
             // Note: Pages are already zeroed by pmm_alloc, so BSS regions are handled automatically.
         }
     }
+
+    if (!loaded_segment) {
+        kprintf("[DAY18-FAIL] no loadable elf segments\n");
+        return -1;
+    }
+
+    kprintf("[TEST] Day 18 ELF Loader Contract: SUCCESS.\n");
 
     return 0;
 }

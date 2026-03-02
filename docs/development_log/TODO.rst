@@ -47,26 +47,26 @@ Reaper-OS: Development Roadmap
    | (Stage 1)     | (User Mode Transition)           | total power; bricked system if it crashes.     | first process (Paradigm) to construct reality.                                                                        |
    +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
    | Day 12 [DONE] | Base Solidification              | Complexity of recursive reclamation;           | Implements User-Mode fault isolation, the                                                                             |
-   |               | (Debt Repayment)                 | IPC rendezvous deadlocks.                      | Resource Reaper, and basic Synchronous IPC.                                                                           |
-   |               |                                  |                                                | Completes the "Minimal Working Product."                                                                              |
+   |               | (Debt Repayment)                 | IPC rendezvous deadlocks.                      | Resource Reaper, and Synchronous IPC rendezvous as                                                                    |
+   |               |                                  |                                                | a Vision/Security/Performance baseline with matrix-gated closure markers.                                            |
    +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
-   | Day 13 [DONE] | Full Context Preservation        | Performance overhead of XSAVE; hardware        | Saves SSE/FPU state during context switches.                                                                          |
-   |               | (SSE/FPU Support)                | compatibility (AVX/SSE).                       | Prevents register corruption in user-space math.                                                                      |
+   | Day 13 [DONE] | Full Context Preservation        | Performance overhead of XSAVE; hardware        | Saves SSE/FPU state during context switches, with                                                                     |
+   |               | (SSE/FPU Support)                | compatibility (AVX/SSE).                       | matrix-gated closure markers for init/isolation/stability.                                                           |
    +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
-   | Day 14 [DONE] | Lifecycle Syscalls               | Race conditions during wait(); cleanup         | Implements SYS_YIELD, SYS_EXIT, and SYS_WAIT.                                                                         |
-   |               | (Yield, Exit, Wait)              | order for complex process trees.               | Provides the basic API for program execution.                                                                        |
+   | Day 14 [DONE] | Lifecycle Syscalls               | Race conditions during wait(); cleanup         | Implements SYS_YIELD, SYS_EXIT, and SYS_WAIT with                                                                    |
+   |               | (Yield, Exit, Wait)              | order for complex process trees.               | matrix-gated closure markers and explicit lifecycle probes.                                                          |
    +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
-   | Day 15 [DONE] | The Genesis Bridge               | Security of bootloader-passed objects;         | Injects the first capability into Paradigm.                                           |
-   |               | (Initial Cap Injection)          | fragmentation of the initial C-Space.          | Allows user-space to begin constructing reality.                                       |
+   | Day 15 [DONE] | The Genesis Bridge               | Security of bootloader-passed objects;         | Injects the first capability into Paradigm with                                        |
+   |               | (Initial Cap Injection)          | fragmentation of the initial C-Space.          | matrix-gated closure markers for module/cap/bootinfo bridge integrity.                 |
    +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
-   | Day 16 [DONE] | Authority over Memory            | Risk of double-mapping; physical frame         | Syscalls for map() and unmap() via CAPS.                                              |
-   |               | (Map/Unmap Syscalls)             | hijacking if validation is weak.               | Enables user-space to manage its own address space.                                   |
+   | Day 16 [DONE] | Authority over Memory            | Risk of double-mapping; physical frame         | Syscalls for map() and unmap() via CAPS, with                                         |
+   |               | (Map/Unmap Syscalls)             | hijacking if validation is weak.               | matrix-gated closure markers for strict rights and unmap/remap lifecycle integrity.   |
    +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
    | Day 17 [DONE] | Safety & Stability Finalization  | Overhead of lock contention; interrupt         | Stack Guard Pages, Kernel Spinlocks, and                                              |
-   |               | (Guards & Locks)                 | latency jitter.                                | Spurious Interrupt handlers. Final Epoch I Seal.                                      |
+   |               | (Guards & Locks)                 | latency jitter.                                | Spurious Interrupt handlers with matrix-gated closure markers for lock/canary/IRQ7/15.|
    +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
    | Day 18 [DONE] | Paradigm Evolution               | User-space complexity; ELF loading             | Replace assembly stub with C-based Paradigm                                           |
-   |               | (User Space C Daemon)            | security (bounds checking).                    | daemon loaded as a Multiboot module.                                                  |
+   |               | (User Space C Daemon)            | security (bounds checking).                    | daemon loaded as a Multiboot module with matrix-gated ELF/bootstrap closure markers.  |
    +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
    | Day 19 [DONE] | Law 4: Conditional Runes         | Mode transition serialization; invisibility    | Implement Mode-Aware capabilities (Conditional                                        |
    |               | (Reality Gating)                 | vs. revocation logic.                          | Runes) to enable O(1) global policy shifts.                                           |
@@ -175,6 +175,9 @@ Reaper-OS: Development Roadmap
    |               | Atomic Budget Hardening          | can violate ceiling/revocation invariants.     | atomic process-budget primitives, revoke-immediate dequeue path, expanded       |
    |               |                                  |                                                | runtime markers, and ratified BSP-only ESAK product profile marker.            |
    +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 55 [DONE] | Day 11 Void Gate                 | Mode/Reality leakage to occupants and stale    | Implemented 4-stage Entry Pipeline (Compile/Verify/Apply/Attest), redacted      |
+   |               | Redesign Closure                 | scheduler leases compromise isolation.         | `SYS_MODE_QUERY`, and enforced epoch-aware lease verification in scheduler.     |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
 
 
 
@@ -241,7 +244,7 @@ All foundational debts listed above have been successfully repaid... table:: Fut
 Project Estimates & Status
 --------------------------
 
-*   **Current Phase:** Epoch III Closure Ratification (Days 46/47/54 closed on February 22, 2026 with envelope evidence and BSP-only ESAK profile).
+*   **Current Phase:** Epoch III Closure Ratification (Days 46/47/54/55 closed on February 24, 2026; Days 12/13/14/15 closures ratified on March 1, 2026; Days 16/17/18/19/20/21/22/23/24 closures ratified on March 2, 2026 with matrix evidence).
 *   **Total Estimated Time:** 13 - 19 Weeks (~4 Months).
 *   **Strategy:** Reaper Envelope (Compatibility-First ABI + Hardware-Enforced Envelope Tiers).
 

@@ -35,6 +35,27 @@ Required invariants:
 - Illegal transitions fail closed with `-1`.
 - Legacy mode transition legality is preserved under envelope verification.
 
+## `GATE_OP_CAP_MINT` (3)
+
+ABI:
+
+- `a0`: source capability slot
+- `a1`: destination capability slot
+- `a2`: new rights bitmask
+- `a3`: badge
+- `a4`: allowed mode mask
+
+Required invariants:
+
+- Caller must own a valid source capability with grant rights.
+- Mode mask must be fail-closed valid:
+  - non-zero
+  - subset of `CAP_MODE_VALID_MASK` only (no undefined bits).
+- Derived mode set is monotonic:
+  - `child.allowed_modes = parent.allowed_modes & requested_allowed_modes`
+  - zero effective mode set is rejected.
+- Rights remain monotonic narrowing (`new_rights` subset of parent rights).
+
 ## General Return Rules
 
 - `0`: Success.
@@ -100,10 +121,12 @@ ABI:
 Required invariants:
 
 - Auditor capability must exist and be `CAP_TYPE_AUDITOR`.
+- Auditor capability must include `CAP_RIGHT_READ`.
 - Destination buffer must be 8-byte aligned.
 - Destination range must be mapped writable in caller address space.
 - Count is capped internally (currently `128`).
 - Read mode outside `{0,1,2,3}` must fail with `-1`.
+- Kernel copy count must remain bounded by requested count and fail closed on mismatch.
 
 Record semantics:
 
@@ -259,6 +282,8 @@ Required invariants:
 - Page count must pass lattice creation limits.
 - Listener count must be `<= 2`.
 - Source/listener destination slots must be distinct.
+- Source slot must be non-zero.
+- Listener destination slots must be non-zero when used.
 - Source cap insert must succeed.
 - Listener caps are minted from source as `CAP_RIGHT_READ` only.
 - On mint failure, partially created slots are rolled back.
@@ -267,6 +292,35 @@ Notes:
 
 - Legacy single-cap behavior remains: pass `a2=0`.
 - Broadcast creation provides one writer/source and up to two read-only listener caps in one syscall.
+
+## `SYS_LATTICE_ATTACH` (13)
+
+ABI:
+
+- `a0`: lattice capability slot.
+- `a1`: user virtual base address for lattice mapping.
+
+Required invariants:
+
+- Capability must exist and be `CAP_TYPE_LATTICE`.
+- Capability must include `CAP_RIGHT_READ`.
+- Virtual address must be page-aligned and in user canonical range.
+- Lattice span (`page_count * PAGE_SIZE`) must remain within user virtual bounds.
+- Attachment must not overlap existing lattice attachments in the same process.
+- Duplicate attachment of the same `(lattice, vaddr)` pair is rejected fail-closed.
+
+## `SYS_ATTUNE` (17)
+
+ABI:
+
+- `a0`: lattice capability slot.
+- `a1`: new crystal index.
+
+Required invariants:
+
+- Capability must exist and be `CAP_TYPE_LATTICE`.
+- Caller must hold `CAP_RIGHT_WRITE` on the lattice capability.
+- Crystal index must be within lattice page bounds.
 
 ## `SYS_LATTICE_DETACH` (19)
 

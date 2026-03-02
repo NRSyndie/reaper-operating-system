@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "process.h"
+#include <entry.h>
 
 typedef enum {
     THREAD_READY,    /* In ready queue */
@@ -59,6 +60,11 @@ typedef struct thread {
 
     /* IPC State */
     uint64_t ipc_payload[4];   /* Register-only data transfer (a0, a1, a2, a3) */
+
+    /* Day 11 Entry Lease */
+    entry_lease_t lease;
+    uint64_t lease_validated_epoch;
+    bool lease_valid_cache;
 
     /* Extended State (SSE/FPU/XSAVE) */
     void* extended_state;      /* Pointer to a 64-byte aligned buffer (usually 1 frame) */

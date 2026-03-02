@@ -12,8 +12,8 @@
 #include "include/console.h"
 #include "include/klog.h"
 #include "include/elf.h"
+#include "include/entry_internal.h"
 
-extern void user_mode_jump(uint64_t rip, uint64_t rsp);
 extern struct limine_memmap_request memmap_request;
 extern struct limine_hhdm_request hhdm_request;
 extern struct limine_executable_address_request executable_address_request;
@@ -31,7 +31,7 @@ extern char kernel_end[];
 static uint64_t paradigm_entry_point = 0;
 
 static void paradigm_entry_stub(void) {
-    user_mode_jump(paradigm_entry_point, 0x800000);
+    entry_pipeline_run(scheduler_get_current(), paradigm_entry_point, 0x800000);
 }
 
 void genesis_bridge_spawn(void) {
@@ -39,11 +39,13 @@ void genesis_bridge_spawn(void) {
 
     /* 0. Find the Module */
     if (!module_request.response || module_request.response->module_count == 0) {
+        kprintf("[DAY15-FAIL] missing genesis module\n");
         kpanic("GENESIS: No modules found! Paradigm Lost.");
     }
     
     struct limine_file* module = module_request.response->modules[0];
     kprintf("[GENESIS] Module Found. Address: 0x%lx, Size: %ld\n", (uint64_t)module->address, module->size);
+    kprintf("[TEST] Day 15 Genesis Module Contract: SUCCESS.\n");
 
     /* 1. Create Paradigm's World */
     uint64_t new_pml4 = vmm_fork_pml4();
@@ -52,6 +54,7 @@ void genesis_bridge_spawn(void) {
     process_t* paradigm = process_create(new_pml4, pcid, cspace, MODE_CASUAL);
     
     if (!paradigm) {
+        kprintf("[DAY15-FAIL] paradigm process creation failed\n");
         kpanic("GENESIS: Failed to create Paradigm process!");
     }
 
@@ -70,6 +73,7 @@ void genesis_bridge_spawn(void) {
     /* 2d. Inject Auditor Capability (Fatal Forensics) */
     cap_identity_t* audit_ident = cap_identity_create(0, CAP_TYPE_AUDITOR, CAP_RIGHT_READ, 0, CAP_MODE_ALL);
     cap_insert(cspace, 4, audit_ident);
+    kprintf("[TEST] Day 15 Genesis Capability Injection: SUCCESS.\n");
 
     /* 3. Prepare Boot Information */
     uint64_t bootinfo_phys = pmm_alloc(COLOR_SECURE, paradigm->pid);
@@ -96,9 +100,11 @@ void genesis_bridge_spawn(void) {
 
     /* 4. Map Boot Info into Paradigm's Reality */
     vmm_map(paradigm, BOOTINFO_VIRT_ADDR, bootinfo_phys, PAGE_USER_DATA);
+    kprintf("[TEST] Day 15 Bootinfo Bridge: SUCCESS.\n");
 
     /* 5. Load the ELF */
     if (elf_load(module->address, paradigm, &paradigm_entry_point) != 0) {
+        kprintf("[DAY15-FAIL] paradigm elf load failed\n");
         kpanic("GENESIS: ELF Load Failed!");
     }
     
@@ -114,6 +120,7 @@ void genesis_bridge_spawn(void) {
     /* 7. Launch Paradigm */
     thread_t* paradigm_thread = thread_create(paradigm, paradigm_entry_stub);
     if (!paradigm_thread) {
+        kprintf("[DAY15-FAIL] paradigm thread creation failed\n");
         kpanic("GENESIS: Failed to create Paradigm thread.");
     }
 
@@ -123,6 +130,7 @@ void genesis_bridge_spawn(void) {
                                  (uint64_t)DEFAULT_QUANTUM * 32ULL,
                                  (uint64_t)DEFAULT_QUANTUM,
                                  (uint64_t)SCHED_DEFAULT_MAX_ACCUMULATED * 4ULL) != 0) {
+        kprintf("[DAY15-FAIL] root scheduling authority mint failed\n");
         kpanic("GENESIS: Failed to mint root scheduling authority.");
     }
 
@@ -133,6 +141,7 @@ void genesis_bridge_spawn(void) {
                                      DEFAULT_QUANTUM,
                                      1,
                                      SCHED_DEFAULT_MAX_ACCUMULATED) != 0) {
+        kprintf("[DAY15-FAIL] thread scheduling authority derive failed\n");
         kpanic("GENESIS: Failed to derive thread scheduling authority.");
     }
     scheduler_add(paradigm_thread);
