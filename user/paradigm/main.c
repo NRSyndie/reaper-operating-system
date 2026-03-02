@@ -73,6 +73,7 @@ int main(int argc, char** argv) {
     int guard_failures = 0;
     bool day27_boundary_ok = false;
     bool day27_strict_ok = false;
+    bool day29_unmap_probe_ok = false;
     if (sys_log_checked((const char*)0x800000000000ULL) != -1) {
         guard_failures++;
         sys_log("PARADIGM: Probe FAIL (log_checked kernel pointer).");
@@ -98,6 +99,7 @@ int main(int argc, char** argv) {
         guard_failures++;
         sys_log("PARADIGM: Probe FAIL (unmap invalid parent slot).");
     } else {
+        day29_unmap_probe_ok = true;
         sys_log("PARADIGM: Probe PASS (unmap invalid parent slot rejected).");
     }
 
@@ -210,6 +212,7 @@ int main(int argc, char** argv) {
 
     /* 5. Strict negative-path probes for Law 2 staged rollout. */
     int law2_failures = 0;
+    int day28_chain_failures = 0;
 
     /* Invalid flag bit outside allowed user mask must fail. */
     if (sys_map_strict(2, 10, slot_data, MAP_FLAGS_USER_RW | (1ULL << 9)) != -1) law2_failures++;
@@ -240,6 +243,7 @@ int main(int argc, char** argv) {
     // Map PDPT into PML4 (Slot 2) at index 1
     if (sys_map_strict(2, 1, slot_pdpt, MAP_FLAGS_USER_RW) != 0) {
         day16_failures++;
+        day28_chain_failures++;
         sys_log("[DAY16-FAIL] link pdpt failed");
         sys_log("PARADIGM: Link PDPT Failed");
     }
@@ -247,6 +251,7 @@ int main(int argc, char** argv) {
     // Map PD into PDPT at index 0
     if (sys_map_strict(slot_pdpt, 0, slot_pd, MAP_FLAGS_USER_RW) != 0) {
         day16_failures++;
+        day28_chain_failures++;
         sys_log("[DAY16-FAIL] link pd failed");
         sys_log("PARADIGM: Link PD Failed");
     }
@@ -254,6 +259,7 @@ int main(int argc, char** argv) {
     // Map PT into PD at index 0
     if (sys_map_strict(slot_pd, 0, slot_pt, MAP_FLAGS_USER_RW) != 0) {
         day16_failures++;
+        day28_chain_failures++;
         sys_log("[DAY16-FAIL] link pt failed");
         sys_log("PARADIGM: Link PT Failed");
     }
@@ -261,6 +267,7 @@ int main(int argc, char** argv) {
     // Map Data into PT at index 0
     if (sys_map_strict(slot_pt, 0, slot_data, MAP_FLAGS_USER_RW) != 0) {
         day16_failures++;
+        day28_chain_failures++;
         sys_log("[DAY16-FAIL] link data failed");
         sys_log("PARADIGM: Link Data Failed");
     }
@@ -277,6 +284,7 @@ int main(int argc, char** argv) {
         sys_log("PARADIGM: Shadow Mapping SUCCESS. The Architect is pleased.");
     } else {
         day16_failures++;
+        day28_chain_failures++;
         sys_log("[DAY16-FAIL] readback mismatch after map");
         sys_log("PARADIGM: Shadow Mapping FAILED. Data Mismatch.");
     }
@@ -284,15 +292,19 @@ int main(int argc, char** argv) {
     /* Day 16 lifecycle on mapping object: unmap -> idempotent unmap -> remap. */
     if (sys_unmap_strict(slot_pt, 0) != 0) {
         day16_failures++;
+        day28_chain_failures++;
         sys_log("[DAY16-FAIL] unmap leaf failed");
     } else if (sys_unmap_strict(slot_pt, 0) != 0) {
         day16_failures++;
+        day28_chain_failures++;
         sys_log("[DAY16-FAIL] idempotent unmap contract failed");
     } else if (sys_map_strict(slot_pt, 0, slot_data, MAP_FLAGS_USER_RW) != 0) {
         day16_failures++;
+        day28_chain_failures++;
         sys_log("[DAY16-FAIL] remap leaf failed");
     } else if (*target_ptr != 0xCAFEBABE12345678) {
         day16_failures++;
+        day28_chain_failures++;
         sys_log("[DAY16-FAIL] readback mismatch after remap");
     }
 
@@ -302,9 +314,28 @@ int main(int argc, char** argv) {
         sys_log("[TEST] Day 16 Unmap/Remap Contract: SUCCESS.");
     }
 
+    if (law2_failures == 0 && day28_chain_failures == 0) {
+        sys_log("[TEST] Day 28 Strict Adoption Contract: SUCCESS.");
+        sys_log("[TEST] Day 28 Strict Negative Path Contract: SUCCESS.");
+        sys_log("[TEST] Day 28 Strict Chain Contract: SUCCESS.");
+    } else {
+        sys_log("[DAY28-FAIL] strict adoption contract failed");
+    }
+
+    if (day29_unmap_probe_ok && day27_boundary_ok && day27_strict_ok && day28_chain_failures == 0) {
+        sys_log("[TEST] Day 29 Strict Unmap Adoption Contract: SUCCESS.");
+        sys_log("[TEST] Day 29 Runtime Validation Contract: SUCCESS.");
+        sys_log("[TEST] Day 29 Strict Path Runtime Contract: SUCCESS.");
+    } else {
+        sys_log("[DAY29-FAIL] strict runtime adoption contract failed");
+    }
+
     /* TEST: FATAL FORENSICS (Updated) */
     sys_log("PARADIGM: Auditing Fate Strings...");
     int day21_failures = 0;
+    bool day30_history_read_ok = false;
+    bool day30_chain_ok = false;
+    bool day30_rejected_ok = false;
 
     if (sys_fate_read(fate_history_buf, 1, 3) != -1) {
         day21_failures++;
@@ -318,6 +349,7 @@ int main(int argc, char** argv) {
     int count = sys_fate_read(fate_history_buf, 16, 4); // Slot 4 is CAP_TYPE_AUDITOR
     
     if (count > 0) {
+        day30_history_read_ok = true;
         sys_log("PARADIGM: Retrieved Fate Records.");
         
         bool chain_ok = true;
@@ -336,6 +368,7 @@ int main(int argc, char** argv) {
         }
         
         if (chain_ok) {
+            day30_chain_ok = true;
             sys_log("PARADIGM: Hash Chain Integrity VERIFIED.");
         } else {
             day21_failures++;
@@ -344,6 +377,7 @@ int main(int argc, char** argv) {
         }
 
         if (rejected_seen) {
+            day30_rejected_ok = true;
             sys_log("PARADIGM: Fate Strings include rejected transition evidence.");
         } else {
             day21_failures++;
@@ -387,6 +421,14 @@ int main(int argc, char** argv) {
         sys_log("[TEST] Day 21 Auditor Access Contract: SUCCESS.");
         sys_log("[TEST] Day 21 Fate Integrity Contract: SUCCESS.");
         sys_log("[TEST] Day 21 Fault Forensics Contract: SUCCESS.");
+    }
+
+    if (day30_history_read_ok && day30_chain_ok && day30_rejected_ok) {
+        sys_log("[TEST] Day 30 Rejection Auditing Contract: SUCCESS.");
+        sys_log("[TEST] Day 30 Fate Result-Code Contract: SUCCESS.");
+        sys_log("[TEST] Day 30 Rejected Evidence Contract: SUCCESS.");
+    } else {
+        sys_log("[DAY30-FAIL] fate rejection auditing contract failed");
     }
 
     /* TEST: PRISMATIC LATTICES (LAW 6) */

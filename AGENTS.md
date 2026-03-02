@@ -1,38 +1,48 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-Reaper-OS is split into kernel, userland, shared ABI headers, docs, and vendored/toolchain code:
-- `kernel/`: microkernel source (`*.c`, `*.s`), linker script, and `kernel/include/` headers.
-- `user/`: initial userspace runtime and Paradigm daemon (`user/paradigm/main.c`).
-- `shared/include/`: kernel/userspace ABI headers (syscalls, mode/capability contracts).
-- `docs/`: architecture notes, reports, and logs.
-- `limine/`: vendored bootloader source (treat as upstream-managed).
-- `toolchain/`, `build-gcc/`: cross-compiler sources/build outputs (do not hand-edit generated files).
+Reaper-OS is organized by kernel, userspace, shared ABI, and documentation:
+- `kernel/`: microkernel sources (`*.c`, `interrupts.s`), headers in `kernel/include/`, linker script, ISO build assets.
+- `user/`: init userspace runtime and Paradigm daemon (`user/paradigm/main.c`), userspace syscall wrappers in `user/lib/`.
+- `shared/include/`: ABI contracts shared by kernel and userspace (`syscall.h`, `mode.h`, `capability.h`).
+- `tools/`: runtime closure and matrix validation scripts (e.g., day-specific closure suites).
+- `docs/`: architecture, conformance matrix, component contracts, and day reports.
+- `limine/`: vendored bootloader source; treat as upstream-managed.
 
 ## Build, Test, and Development Commands
-Run commands from the repo root:
-- `make -C kernel`: build `kernel/kernel.elf`.
-- `make -C user`: build `user/init.elf`.
-- `make -C kernel iso`: build kernel + userland and pack `kernel/reaper-os.iso`.
-- `make -C kernel run`: boot ISO in QEMU; serial output is written to `kernel/serial.log`.
-- `make -C kernel clean && make -C user clean`: remove local build artifacts.
-- `make -C kernel limine_build`: rebuild Limine binaries if boot assets are missing.
+Run from repository root:
+- `make -C user`: build userspace (`user/init.elf`).
+- `make -C kernel`: build kernel (`kernel/kernel.elf`).
+- `make -C kernel iso`: build bootable image (`kernel/reaper-os.iso`).
+- `make -C kernel run`: boot in QEMU with serial logging.
+- `make -C kernel verify_matrix`: mandatory 3-run runtime matrix gate.
+- `make -C kernel verify_day28`: Day 28 strict-adoption closure validation.
+- `./tools/run_day28_closure_suite.sh --runs 5`: extended repeat-run closure check.
 
 ## Coding Style & Naming Conventions
-- Language: freestanding C (`gnu11` in kernel, `gnu99` in user), plus x86_64 assembly.
-- Indentation: 4 spaces; keep braces in existing K&R-style patterns.
-- Naming: `snake_case` for functions/variables, `UPPER_SNAKE_CASE` for macros/constants, suffix structs with `_t` where already established (`process_t`).
-- Keep shared ABI changes synchronized between `shared/include/` and both consumers (`kernel/`, `user/`).
-- Prefer small, auditable functions in kernel paths; avoid policy-heavy logic in kernel space.
+- Languages: freestanding C (`gnu11` kernel, `gnu99` user) and x86_64 assembly.
+- Indentation: 4 spaces; follow existing K&R-style brace patterns.
+- Naming: `snake_case` for functions/variables, `UPPER_SNAKE_CASE` for macros/constants.
+- Keep ABI updates synchronized across `shared/include/`, `kernel/`, and `user/`.
+- Prefer small, auditable kernel functions and fail-closed validation paths.
 
 ## Testing Guidelines
-- Primary tests are boot-time kernel self-tests and userspace probes exercised during `make -C kernel run`.
-- **Mandatory Gate:** Run `make -C kernel verify_matrix` to execute the automated 3-run runtime matrix validation (Law 2 strict mapping, Fate Strings integrity, and Envelope/Entry markers).
-- Review `kernel/serial.log` for pass/fail markers and syscall boundary checks from Paradigm.
-- Add regression coverage by extending kernel self-test routines and deterministic userspace probes.
+- Primary evidence is runtime serial markers plus forbidden-marker absence.
+- Add deterministic positive and negative probes for high-risk syscall paths.
+- For closure changes, update matrix markers in `tools/run_law2_fate_matrix.sh` and conformance docs.
+- Keep probes bounded; avoid unbounded retry loops in validation paths.
 
 ## Commit & Pull Request Guidelines
-- This workspace does not include a top-level `.git` history, so project-specific commit conventions cannot be derived directly here.
-- Use concise, imperative commit messages with scope prefixes (for example: `kernel: harden syscall pointer checks`).
-- PRs should include: purpose, touched subsystems, exact test commands run, and relevant serial/log excerpts.
-- If boot flow/UI behavior changes, include updated config snippets (for example `kernel/isofiles/limine.conf`) and screenshots/log evidence where applicable.
+- Use concise, imperative commits with subsystem scope, e.g.:
+  - `kernel: harden map/unmap validation`
+  - `docs: add day28 closure contract`
+- PRs should include:
+  - purpose and impacted subsystems
+  - exact commands executed
+  - serial/log evidence for required markers
+  - doc synchronization for contracts, reports, and conformance when behavior changes.
+
+## Security & Configuration Notes
+- Preserve fail-closed semantics for syscall validation and capability checks.
+- Do not weaken required/forbidden runtime marker gates.
+- Avoid hand-editing generated toolchain/build outputs (`build-gcc/`, `toolchain/`).

@@ -55,7 +55,7 @@ else
 endif
 
 # --- Main Targets ---
-.PHONY: all run iso clean limine_build verify_matrix
+.PHONY: all run iso clean limine_build verify_matrix verify_day28 verify_day29 verify_day30
 all: $(KERNEL_ELF)
 
 LOG_DIR_TARGET := $(LOG_DIR)
@@ -69,6 +69,18 @@ run: iso $(LOG_DIR_TARGET)
 verify_matrix: iso
 	$(VECHO) "  VERIFY  Law2+Fate runtime matrix"
 	$(Q)../tools/run_law2_fate_matrix.sh --runs 3 --timeout 35 --iso $(ISO_FILE) --out-dir .
+
+verify_day28: iso
+	$(VECHO) "  VERIFY  Day 28 strict adoption closure suite"
+	$(Q)../tools/run_day28_closure_suite.sh --runs 3 --timeout 35 --iso $(ISO_FILE) --out-dir .
+
+verify_day29: iso
+	$(VECHO) "  VERIFY  Day 29 strict runtime closure suite"
+	$(Q)../tools/run_day29_closure_suite.sh --runs 3 --timeout 35 --iso $(ISO_FILE) --out-dir .
+
+verify_day30: iso
+	$(VECHO) "  VERIFY  Day 30 fate rejection auditing closure suite"
+	$(Q)../tools/run_day30_closure_suite.sh --runs 3 --timeout 35 --iso $(ISO_FILE) --out-dir .
 
 # Build Limine from source using local directory
 limine_build:

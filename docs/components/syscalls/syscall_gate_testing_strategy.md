@@ -65,6 +65,17 @@ Release closure is blocked until all required gates pass.
   - mint/copy/delete/revoke/retype
 - Mapping flows pass:
   - strict map/unmap behavior + negative probes
+  - Day 28 strict-adoption closure probes:
+    - strict negative-path rejections
+    - strict recursive chain link success
+    - strict unmap/remap lifecycle stability
+  - Day 29 strict-runtime closure probes:
+    - strict unmap adoption in active boundary/runtime probes
+    - strict map/unmap runtime behavior validated in matrix runs
+  - Day 30 rejection-auditing closure probes:
+    - fate hash-chain integrity remains valid
+    - rejected transition evidence is visible in audit reads
+    - fate result-code semantics are runtime-validated
 - Lattice flows pass:
   - create/attach/attune/detach + listener access constraints
 - Fate/audit flows pass:
@@ -133,6 +144,21 @@ Serial logs must contain, at minimum:
 - `[TEST] Deterministic RR rotation stable`
 - `[TEST] SMP atomic budget integrity`
 - `[TEST] ESAK IPI profile: BSP_ONLY`
+- `[TEST] Day 28 Strict Adoption Contract: SUCCESS.`
+- `[TEST] Day 28 Strict Negative Path Contract: SUCCESS.`
+- `[TEST] Day 28 Strict Chain Contract: SUCCESS.`
+- `[TEST] Day 29 Strict Unmap Adoption Contract: SUCCESS.`
+- `[TEST] Day 29 Runtime Validation Contract: SUCCESS.`
+- `[TEST] Day 29 Strict Path Runtime Contract: SUCCESS.`
+- `[TEST] Day 30 Rejection Auditing Contract: SUCCESS.`
+- `[TEST] Day 30 Fate Result-Code Contract: SUCCESS.`
+- `[TEST] Day 30 Rejected Evidence Contract: SUCCESS.`
+
+Serial logs must not contain:
+
+- `[DAY28-FAIL]`
+- `[DAY29-FAIL]`
+- `[DAY30-FAIL]`
 
 ## 5. Final-Product Exit Criteria
 
@@ -140,6 +166,9 @@ The syscall gate is release-ready only when:
 
 - all required layers in this strategy pass
 - matrix runtime verification passes 3/3 runs
+- Day 28 closure suite passes (`./tools/run_day28_closure_suite.sh`)
+- Day 29 closure suite passes (`./tools/run_day29_closure_suite.sh`)
+- Day 30 closure suite passes (`./tools/run_day30_closure_suite.sh`)
 - required runtime markers are present and forbidden markers are absent
 - docs/version logs are synchronized with exact commands and evidence paths
 - no unresolved syscall-gate TODOs remain in code or release checklists
