@@ -17,7 +17,7 @@ ASFLAGS = -g
 LDFLAGS = -nostdlib -T linker.ld
 
 # --- Source Files ---
-SRCS_C = main.c console.c serial.c pmm.c vmm.c mode.c limine_reqs.c cpu.c pcid.c slab.c capability.c idt.c gdt.c klog.c syscall.c process.c thread.c scheduler.c genesis.c elf.c lattice.c kmalloc.c ocular.c entry.c
+SRCS_C = main.c console.c serial.c pmm.c vmm.c mode.c limine_reqs.c cpu.c pcid.c slab.c capability.c idt.c gdt.c klog.c syscall.c process.c thread.c scheduler.c genesis.c elf.c lattice.c kmalloc.c ocular.c entry.c power.c
 SRCS_ASM = interrupts.s
 
 OBJS = $(SRCS_ASM:.s=.o) $(SRCS_C:.c=.o)

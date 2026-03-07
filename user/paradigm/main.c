@@ -46,16 +46,19 @@ int main(int argc, char** argv) {
         if (sys_mode_transition(MODE_SECURE) != 0) {
             env_probe_failures++;
         }
-        if (sys_mode_transition(MODE_CASUAL) != 0) {
+        if (sys_mode_transition_ex(MODE_CASUAL, MODE_AUTH_PASSWORD | MODE_AUTH_COOLDOWN_ELAPSED) != 0) {
             env_probe_failures++;
         }
-        if (sys_mode_transition(MODE_GHOST) != 0) {
+        if (sys_mode_transition_ex(MODE_GHOST, MODE_AUTH_PASSWORD | MODE_AUTH_MANUAL) != 0) {
             env_probe_failures++;
         }
-        if (sys_mode_transition(MODE_SECURE) != -1) {
+        if (sys_mode_transition_ex(MODE_CASUAL, MODE_AUTH_PASSWORD) != -1) {
             env_probe_failures++;
         }
-        if (sys_mode_transition(MODE_CASUAL) != 0) {
+        if (sys_mode_transition_ex(MODE_SECURE, MODE_AUTH_PASSWORD | MODE_AUTH_MANUAL) != 0) {
+            env_probe_failures++;
+        }
+        if (sys_mode_transition_ex(MODE_CASUAL, MODE_AUTH_PASSWORD | MODE_AUTH_COOLDOWN_ELAPSED) != 0) {
             env_probe_failures++;
         }
 
@@ -336,6 +339,7 @@ int main(int argc, char** argv) {
     bool day30_history_read_ok = false;
     bool day30_chain_ok = false;
     bool day30_rejected_ok = false;
+    bool day30_reason_codes_ok = false;
 
     if (sys_fate_read(fate_history_buf, 1, 3) != -1) {
         day21_failures++;
@@ -354,6 +358,7 @@ int main(int argc, char** argv) {
         
         bool chain_ok = true;
         bool rejected_seen = false;
+        bool rejected_reason_seen = false;
         for (int i = 0; i < count - 1; i++) {
              /* Verify Hash Chain: history[i].prev_hash must match history[i+1].curr_hash */
              if (fate_history_buf[i].prev_hash != fate_history_buf[i+1].curr_hash) {
@@ -361,10 +366,16 @@ int main(int argc, char** argv) {
              }
             if (fate_history_buf[i].result_code == FATE_RESULT_REJECTED) {
                 rejected_seen = true;
+                if (fate_history_buf[i].fault_error_code != MODE_REJECT_NONE) {
+                    rejected_reason_seen = true;
+                }
             }
         }
         if (fate_history_buf[count - 1].result_code == FATE_RESULT_REJECTED) {
             rejected_seen = true;
+            if (fate_history_buf[count - 1].fault_error_code != MODE_REJECT_NONE) {
+                rejected_reason_seen = true;
+            }
         }
         
         if (chain_ok) {
@@ -383,6 +394,15 @@ int main(int argc, char** argv) {
             day21_failures++;
             sys_log("[DAY21-FAIL] rejected transition evidence missing");
             sys_log("PARADIGM: Fate Strings missing rejected transition evidence.");
+        }
+
+        if (rejected_reason_seen) {
+            day30_reason_codes_ok = true;
+            sys_log("PARADIGM: Fate Strings include transition reject reason codes.");
+        } else {
+            day21_failures++;
+            sys_log("[DAY30-FAIL] reject reason code evidence missing");
+            sys_log("PARADIGM: Fate Strings missing transition reject reason codes.");
         }
 
         int fault_count = sys_fate_read_ex(fate_fault_buf, 16, 4, FATE_READ_FAULTS);
@@ -423,7 +443,7 @@ int main(int argc, char** argv) {
         sys_log("[TEST] Day 21 Fault Forensics Contract: SUCCESS.");
     }
 
-    if (day30_history_read_ok && day30_chain_ok && day30_rejected_ok) {
+    if (day30_history_read_ok && day30_chain_ok && day30_rejected_ok && day30_reason_codes_ok) {
         sys_log("[TEST] Day 30 Rejection Auditing Contract: SUCCESS.");
         sys_log("[TEST] Day 30 Fate Result-Code Contract: SUCCESS.");
         sys_log("[TEST] Day 30 Rejected Evidence Contract: SUCCESS.");

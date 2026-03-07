@@ -582,6 +582,10 @@ void scheduler_get_metrics(sched_metrics_t* out) {
     spinlock_irqrestore(&cpu->runq_lock, flags);
 }
 
+uint64_t scheduler_get_global_tick(void) {
+    return __atomic_load_n(&g_sched_global_tick, __ATOMIC_ACQUIRE);
+}
+
 void scheduler_init(void) {
     scheduler_cpu_state_t* cpu = sched_cpu_state();
     mode_id_t mode_now = mode_get_current();

@@ -178,6 +178,54 @@ Reaper-OS: Development Roadmap
    | Day 55 [DONE] | Day 11 Void Gate                 | Mode/Reality leakage to occupants and stale    | Implemented 4-stage Entry Pipeline (Compile/Verify/Apply/Attest), redacted      |
    |               | Redesign Closure                 | scheduler leases compromise isolation.         | `SYS_MODE_QUERY`, and enforced epoch-aware lease verification in scheduler.     |
    +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 56 [DONE] | Day 12 Closure Ratification      | Historical Day 12 claims lacked deterministic   | Added deterministic Day 12 closure markers and matrix gates for fault isolation, |
+   |               |                                  | closure-gated runtime evidence.                 | rendezvous, lifecycle, and process annihilation behavior.                       |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 57 [DONE] | Day 13 Closure Ratification      | Extended-state/context claims could drift        | Added deterministic Day 13 closure markers, forbidden fail markers, and repeat-  |
+   |               |                                  | without enforced matrix and repeat-run gates.    | run suite validation for FPU/SSE init and cross-thread isolation.               |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 58 [DONE] | Day 14 Closure Ratification      | Lifecycle syscall behavior lacked release-gated | Added deterministic Day 14 markers/fail markers and repeat-run closure gates for |
+   |               |                                  | closure proof under repeated runtime boots.     | wait/yield/lifecycle ABI contract validation.                                   |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 59 [DONE] | Day 15 Closure Ratification      | Genesis bridge behavior required deterministic   | Added deterministic Day 15 markers/fail markers, extended matrix gates, and      |
+   |               |                                  | closure evidence across matrix and repeat runs. | repeat-run suite for module/capability/bootinfo bridge contract coverage.       |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 60 [DONE] | Day 16 Closure Ratification      | Map/unmap contract regressions could pass        | Added deterministic Day 16 strict-rights and unmap/remap closure markers, fail-  |
+   |               |                                  | without explicit required/forbidden runtime gates.| closed paths, and repeat-run validation with synchronized docs.                |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 61 [DONE] | Day 17 Closure Ratification      | Hardening invariants (spinlocks/canary/IRQ      | Added deterministic Day 17 markers/fail markers and repeat-run closure suite to  |
+   |               |                                  | filters) needed explicit closure ratification.   | make hardening regressions release-blocking.                                    |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 62 [DONE] | Day 18 Closure Ratification      | ELF/bootstrap behavior required enforceable      | Added deterministic Day 18 closure markers, fail markers, matrix gates, and      |
+   |               |                                  | closure evidence instead of historical claims.   | repeat-run suite for ELF header/loader/daemon bootstrap contract checks.        |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 63 [DONE] | Day 19 Closure Ratification      | Conditional Rune mode-mask semantics required    | Hardened CAP mode-mask semantics and added deterministic Day 19 closure markers, |
+   |               |                                  | stricter fail-closed validation and closure gates.| fail markers, matrix gates, and repeat-run suite evidence.                    |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 64 [DONE] | Day 20 Closure Ratification      | Lattice create/attach/detach invariants were     | Hardened Day 20 lattice invariants and added deterministic closure markers/fail  |
+   |               |                                  | vulnerable to drift without closure-grade probes.| markers with matrix and repeat-run ratification.                               |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 65 [DONE] | Day 21 Closure Ratification      | Auditor Fate-read authority and bounds checks    | Hardened Day 21 auditor invariants and added deterministic forensic closure      |
+   |               |                                  | required explicit, deterministic closure gates.   | markers/fail markers with matrix and repeat-run evidence.                       |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 66 [DONE] | Day 22 Closure Ratification      | Derivation-tree/revocation evidence needed       | Added deterministic Day 22 lineage closure markers/fail markers and repeat-run   |
+   |               |                                  | synchronized matrix, suite, and report artifacts.| suite with synchronized matrix/release/conformance gates.                      |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 67 [DONE] | Day 23 Closure Ratification      | Allocator closure evidence gap remained without   | Added deterministic Day 23 allocator closure marker/fail marker and repeat-run   |
+   |               |                                  | deterministic marker gates and repeat-run checks.| suite with synchronized matrix/release/conformance artifacts.                  |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 68 [DONE] | Day 24 Closure Ratification      | PMM/Law9/Ocular probes needed explicit closure   | Added deterministic Day 24 closure markers/fail markers, Ocular readiness API,   |
+   |               |                                  | ratification to keep regressions release-blocking.| and repeat-run suite plus synchronized closure artifacts.                     |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 69 [DONE] | Day 25 Closure Ratification      | PCID switch hygiene and fail-closed validation    | Hardened Day 25 PCID/vmm_switch fail-closed checks, added scrub contract         |
+   |               |                                  | needed deterministic closure gates.              | markers/fail markers, and ratified matrix + repeat-run evidence.               |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 70 [DONE] | Day 26 Closure Ratification      | Law 6 Void Wall/attunement closure behavior      | Added deterministic Day 26 Law 6 closure markers/fail markers, hardened lattice |
+   |               |                                  | required repeatable matrix/suite ratification.   | fault-window validation, and ratified repeat-run evidence.                     |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 71 [DONE] | Day 27 Closure Ratification      | Boundary-hardening/strict-foundation regressions | Added deterministic Day 27 boundary + strict closure markers/fail markers and    |
+   |               |                                  | needed deterministic release-blocking gates.      | extended matrix + repeat-run ratification with synchronized closure artifacts.  |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
 
 
 

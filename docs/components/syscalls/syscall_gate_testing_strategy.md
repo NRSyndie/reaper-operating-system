@@ -131,6 +131,7 @@ Serial logs must contain, at minimum:
 - `[TEST] Syscall Gate performance budget: SUCCESS.`
 - `PARADIGM: Envelope transition acceptance probe PASS.`
 - `PARADIGM: Envelope transition rejection probe PASS.`
+- `PARADIGM: Fate Strings include transition reject reason codes.`
 - `[MODE_LEGACY_SHIM]`
 - `[ENV_COMPILE]`
 - `[ENV_VERIFY]`

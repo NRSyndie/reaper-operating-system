@@ -14,6 +14,7 @@ void sys_yield(void);
 int sys_wait(uint64_t flags);
 int sys_mode_query(void);
 int sys_mode_transition(uint32_t target_mode);
+int sys_mode_transition_ex(uint32_t target_mode, uint32_t auth_flags);
 
 /* Recursive VMM API (strict contract enforced by kernel) */
 int sys_map(uint32_t parent_cap, uint32_t index, uint32_t child_cap, uint64_t flags);

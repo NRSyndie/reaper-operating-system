@@ -18,7 +18,13 @@ Requests a shift in the system's Reality.
     - `target`: The `mode_id_t` to enter.
     - `source`: The `transition_source_t` (KERNEL, DAEMON, or USER).
 - **Returns:** `0` on success, `-1` if the transition is illegal or redundant.
-- **Enforcement:** Validates against the transition matrix (e.g., blocks `GHOST -> SECURE`).
+- **Enforcement:** Validates against the transition matrix (e.g., blocks `GHOST -> CASUAL` and `LOCKDOWN -> CASUAL`).
+
+### `int mode_request_transition_ex(mode_id_t target, transition_source_t source, uint32_t auth_flags)`
+Extended transition request with explicit auth evidence flags.
+- **Parameters:** same as `mode_request_transition` plus `auth_flags` (`MODE_AUTH_*`).
+- **Returns:** `0` on success, `-1` on reject.
+- **Audit behavior:** rejected attempts persist Fate transition records with deterministic reason codes in `fault_error_code`.
 
 ## 3. State Queries
 

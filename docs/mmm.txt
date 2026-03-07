@@ -1,231 +1,295 @@
+• 1. Critical: evidence can be spoofed because closure is string-marker based.
+     The matrix trusts serial log text produced largely by userland (Paradigm), so a compromised or buggy daemon can print success markers without proving behavior.
+     References: run_law2_fate_matrix.sh:98, main.c:325, main.c:426
+     Tighten: move Day 29/30 pass/fail to kernel-owned attestation records (structured test IDs + status + reason code), and have matrix parse those only.
+  2. High: Day 29 gate proves rejection behavior, not strict-unmap adoption depth.
+     day29_unmap_probe_ok is set by one invalid-parent rejection probe; it does not prove all intended active paths are strict-only or that legacy interface is impossible.
+     Reference: main.c:98, main.c:325
+     Tighten: add kernel counters for strict map/unmap calls and assert expected minimums per boot; fail if any legacy path is hit.
+  3. High: Day 30 signal is window-limited and can drift with load.
+     Day 30 checks read only 16 Fate entries; rejected evidence can age out under higher event volume, causing fragile behavior.
+     Tighten: define invariant table (invariant id -> kernel owner -> probe -> fail code) and enforce 1:1 coverage.
+  5. Medium: no adversarial anti-spoof test.
+     We do not test that fake success logs cannot satisfy closure.
+     Tighten: add a sabotage mode that prints all success markers while violating contracts; matrix must still fail via kernel attestation mismatch.
+  - Build impact: small code growth in kernel/ + shared headers.
+  - Runtime/test impact: matrix scripts change from grep to structured checks.
+  - Net: slightly longer validation time, much stronger trust signal.
 
-• Collected. I now have the full Day 11 redesign context across code, docs, and test harness.
+  2. Strict map/unmap counter assertions
 
-  What I gathered
+  - Build impact: minimal (metrics fields + checks).
+  - Runtime/test impact: tiny overhead from increment/check logic.
+  - Net: near-zero performance cost, stronger Day 29 proof.
 
-  - Entry path and privilege transition:
-      - kernel/genesis.c uses paradigm_entry_stub -> user_mode_jump(...).
-      - kernel/interrupts.s has direct user_mode_jump (IRETQ) and syscall_entry (SWAPGS + SYSRETQ).
-  - Runtime transition pipeline already exists for mode transitions:
-      - kernel/mode.c implements compile/verify/apply/attest markers with legacy shim.
-  - Scheduler is already authority/mode/budget-gated:
-      - kernel/scheduler.c enforces auth, mode, budget at enqueue/wake/dispatch; updates TSS + syscall kernel stack on switch.
-  - Syscall ABI is gate-v2 and centralized:
-      - shared/include/syscall.h, kernel/syscall.c, user/lib/reaper.c.
-  - Day 11 dependency pieces verified:
-      - TSS stack management (kernel/gdt.c), per-thread kernel stacks (kernel/thread.c), user-half isolation in vmm_fork_pml4 (kernel/vmm.c).
-  - Test and evidence surfaces:
-      - tools/run_law2_fate_matrix.sh required/forbidden markers.
-      - Kernel startup tests in kernel/main.c.
-      - Paradigm runtime probes in user/paradigm/main.c.
+  3. Remove legacy map/unmap wrappers
 
-  Critical findings for redesign
+  - Build impact: medium, because userland and docs must be updated together.
+  - Compatibility impact: breakage for old call sites until migrated.
+  - Net: cleaner ABI, less ambiguity, fewer future regressions.
 
-  - Occupants currently can query mode (sys_mode_query), which conflicts with your “occupants never know reality” model:
-      - user/include/reaper.h, user/lib/reaper.c, kernel/syscall.c.
-  - Day 11 entry is still a direct jump primitive; it is not yet contract/lease-based.
-  - Entry markers (ENTRY_*) do not exist yet; only envelope transition markers exist.
-  - syscall_entry is global CPU GS scratchpad-based (single cpu_syscall_gs), not explicit per-CPU struct.
-  - Matrix harness currently validates mode/scheduler/syscall markers, but not dedicated Day 11 lease/entry invariants.
+  4. Transaction-keyed Fate probes (instead of window-only reads)
 
-  Pitfall map (now confirmed in code)
+  - Build impact: medium-high (new fields/filter logic in kernel + user API updates).
+  - Runtime/test impact: slightly more code path complexity, deterministic audits.
+  - Net: more robust Day 30 validation under load.
 
-  - Policy-doc drift risk: mode policy docs describe much more than kernel-enforced contract today.
-  - False confidence risk if new laws are not tied to required markers + negative probes in matrix.
+  5. Anti-spoof/sabotage tests
 
-  Test infrastructure readiness
+  - Build impact: low.
+  - Validation impact: matrix takes longer (extra negative scenarios).
+  - Net: catches false confidence early.
 
-  - Strong baseline exists: build + ISO + matrix + Paradigm probes.
-  - Easy to extend: add new required markers and negative probes in tools/run_law2_fate_matrix.sh and user/paradigm/main.c.
+  Overall:
 
-• It changes the strategy from “add checks around user_mode_jump” to “restructure runtime contracts”.
+  - Compile/build time: slight increase.
+  - Test/matrix time: moderate increase.
+  - Risk of integration breakage: medium during migration.
+  - Security/reliability gain: high.
 
-  Concrete impact:
+  If you want, I can stage this in a low-risk order: attestation + counters first, then transaction-key Fate, then wrapper removal last.
 
-  1. Day 11 scope expands
 
-  2. Mode-query API must change
+› How do they affect the modes?
 
-  - SYS_MODE_QUERY currently leaks Reality to Occupants.
-  - If we keep your model, this must be removed, stubbed, or capability-gated behind a privileged diagnostics path.
 
-  3. Use existing envelope pipeline pattern
+■ unexpected status 403 Forbidden: <html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+r;width:100%}.explanation a{color:#000}@media (prefers-color-scheme:dark){body{background-color:#343541;c..., url: https://chatgpt.com/backend-api/codex/responses, cf-ray: 9d603ee82a0c8a42-NBO
+› How do they affect the modes? Read the documents in the docs directory for context
 
-  - mode.c already has compile/verify/apply/attest with markers.
-  - Best strategy: implement Day 11 entry with the same pattern (entry contract/lease), not a bespoke one-off.
 
-  4. Integrate with existing auth gates
+• I’ll read the mode architecture/contracts in docs/ and map each proposed hardening change to concrete mode behavior (Casual/Secure/Lockdown/Ghost, envelope pipeline, and Fate mode-transition auditing).
 
-  - Scheduler already enforces auth/mode/budget.
-  - Entry lease checks should plug into these gates, not duplicate parallel logic.
+• Explored
+  └ Read mode_api.md, mode_state_machine.md, mode_kernel_behaviors.md
+    Search mode|MODE_|Envelope|ENTRY_|Fate|result_code|transition|Ghost|Lockdown|Secure|Casual|scheduler in docs
+    Read mode_integration_points.md, day5r_envelope_multimode_logic.md, zero_residue_policy.md, mode_implementation_plan.md
 
-  5. Testing must be matrix-first
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-  - Existing verify_matrix harness is the release gate.
-  - Strategy now requires adding ENTRY_* required markers + negative probes in Paradigm and matrix script, otherwise no closure confidence.
+• Short answer: the proposed hardening mostly affects how modes are enforced and evidenced, not the legal mode graph itself.
 
-  6. Performance plan is mandatory
+  From the docs, legal/illegal transitions stay defined by the mode state machine and envelope pipeline (mode_state_machine.md, day5r_envelope_multimode_logic.md, mode_api.md).
 
-  - syscall_entry/dispatch is hot path.
-  - New checks need epoch/lease caching to avoid regression; include explicit performance budget marker gate.
+  ## Mode impact by change
 
-  7. Doc-policy reconciliation is required work
+  1. Kernel-owned attestations (replace user marker trust)
 
-  - Policy docs over-specify behavior beyond current kernel enforcement.
-  - Strategy must include a conformance matrix (kernel_enforced / daemon_enforced / deferred) to prevent future drift.
+  - Effect on modes: Stronger enforcement of mode transition evidence (compile/verify/apply/attest) with less spoof risk.
+  - Risk: If attestation path fails and is fail-closed, transitions (including emergency to Lockdown) could be blocked.
+  - Tighten: make transition apply authoritative; attestation failure must not block -> LOCKDOWN safety transitions.
 
-  Net: the gathered info pushes us to a contract-and-lease redesign anchored in existing gates, with API cleanup and matrix enforcement as first-class deliverables.
+  2. Strict map/unmap counters + legacy path removal
 
-• Actionable implementation checklist (file-mapped)
+  - Effect on modes: Better isolation confidence in all modes, especially Ghost/Lockdown where mapping mistakes are highest risk.
+  - Risk: aggressive cutover can break bootstrap/runtime probes.
+  - Tighten: staged ABI cutover with hard deadline; after cutover, legacy path panics in debug builds.
 
-  A. Define Day 11 entry contract and lease types [DONE]
+  - Tighten: mode-scoped audit views and redaction policy for Ghost-sensitive records.
 
-  - Edit:
-      - shared/include/*.h (new or existing ABI header for entry contract IDs/status).
-      - kernel/include/*.h (kernel-private lease/cache state).
-  - Add:
-      - lease identity (lease_id, epoch, authority scope, mode scope, expiry semantics).
-      - validation result codes that can be surfaced as markers and syscall errors.
-  - Done when:
-      - kernel + user headers compile together with no ABI mismatch warnings.
+  4. Anti-spoof sabotage tests
 
-  B. Implement entry pipeline with marker parity [DONE]
+  - Effect on modes: validates that mode evidence cannot be forged by userland.
+  - Risk: none to runtime behavior; only test-time overhead.
+  - Tighten: require sabotage pass in verify_matrix gate.
 
-  - Edit:
-      - kernel/mode.c (or sibling module dedicated to entry pipeline).
-      - kernel/genesis.c (replace direct entry assumptions with contract invocation).
-  - Add stages:
-      - entry_compile -> entry_verify -> entry_apply -> entry_attest.
-  - Add markers:
-      - ENTRY_COMPILE_OK
-      - ENTRY_VERIFY_OK
-      - ENTRY_APPLY_OK
-      - ENTRY_ATTEST_OK
-      - ENTRY_REJECT_<REASON>
-  - Done when:
-      - every successful entry emits all 4 positive markers in order.
-      - every rejected entry emits one deterministic reject marker.
+  ## Where still weak for modes
 
-  C. Integrate with scheduler authority/mode/budget gates [DONE]
+  - Mode docs require fate parity, but runtime gates are still marker-centric in scripts (run_law2_fate_matrix.sh).
+  - No explicit “cannot block emergency Lockdown” rule in new attestation hardening.
+  - Ghost confidentiality risk if richer audit payloads are globally readable.
 
-  - Edit:
-      - kernel/scheduler.c
-  - Add:
-      - lease verification at enqueue/wake/dispatch boundaries using existing auth/mode/budget checks.
-      - epoch-aware cache to avoid re-validating unchanged lease state on hot path.
-  - Done when:
-      - no duplicated policy logic outside scheduler gates.
-      - dispatch still succeeds for valid workloads in all modes.
+  ## Unconventional tightening I recommend
 
-  D. Remove occupant-reality leakage in mode query API [DONE]
+  1. Kernel-signed transition attestation records with monotonic transition IDs.
+  2. Non-bypassable rule: critical -> LOCKDOWN cannot be blocked by audit/telemetry failure.
+  3. Mode-scoped audit capabilities: Ghost records require Ghost-bound auditor capability.
+  4. Dual-channel verification: structured kernel attestation is mandatory; user markers are informational only.
 
-  - Edit:
-      - shared/include/syscall.h
-      - kernel/syscall.c
-      - user/include/reaper.h
-      - user/lib/reaper.c
-      - user/paradigm/main.c (adapt probes/callers)
-  - Options (pick one and document):
-      - remove SYS_MODE_QUERY from occupant ABI.
-      - return redacted/stubbed value for occupants.
-      - capability-gate diagnostics-only query.
-  - Done when:
-      - occupant code path cannot recover raw reality mode.
 
-  E. Tighten syscall entry state ownership [DONE]
+› At this point, should we discuss the conditions modes can change into what, and what is required?
 
-  - Edit:
-      - kernel/interrupts.s
-      - kernel code owning cpu_syscall_gs state
-  - Add:
-      - explicit per-CPU state contract (if not full refactor now, introduce an adapter boundary and marker coverage).
-  - Done when:
-      - ownership model is explicit in code comments and tested via boot probes.
 
-  F. Extend matrix and Paradigm probes [DONE]
+• Yes. This is the right time.
 
-  - Edit:
-      - tools/run_law2_fate_matrix.sh
-      - user/paradigm/main.c
-      - kernel/main.c (startup self-test hooks if needed)
-  - Add required markers:
-      - ENTRY_COMPILE_OK
-      - ENTRY_VERIFY_OK
-      - ENTRY_APPLY_OK
-      - ENTRY_ATTEST_OK
-  - Add forbidden/negative checks:
-      - entry success without verify marker.
-      - occupant-visible raw mode leakage.
-      - dispatch with stale/invalid lease epoch.
-  - Done when:
-      - matrix fails on each injected violation and passes on clean run.
+  You now have stronger closure gates for Day 28–30, but transition policy is still the highest-leverage risk area. Finalizing transition conditions now will prevent security drift later.
 
-  G. Add policy-to-enforcement conformance matrix [DONE]
+  Prioritize locking these 5 items:
 
-  - Edit:
-      - docs/components/modes/*.md
-      - docs/mmm.txt (tracking table or section)
-  - Add for each policy rule:
-      - enforcement owner: kernel_enforced | daemon_enforced | deferred.
-      - evidence: marker/test name and file location.
-  - Done when:
-      - every policy statement maps to one owner and one evidence reference.
+  1. Transition legality matrix (absolute)
+  - No implicit fallthrough rules.
 
-• Improved rollout plan (proposal)
+  2. Authority model per transition
 
-  Phase 0: Contract freeze
+  - Who may request each transition (USER/DAEMON/KERNEL).
+  - Which transitions are kernel-only (especially emergency -> LOCKDOWN).
 
-  - Freeze Day 11 invariants and marker names before deep refactors.
-  - Decide SYS_MODE_QUERY policy (remove, redact, or capability-gate).
-  - Exit gate:
-      - approved invariants list and marker schema committed in docs.
+  3. Preconditions and evidence
 
-  Phase 1: Non-invasive scaffolding
+  - Required signals/proofs before transition (threat level, auth factors, clean window, etc.).
+  - Required attestation artifacts on success/failure.
 
-  - Land headers/types and marker plumbing behind compile-time guards.
-  - Keep legacy direct path available as fallback.
-  - Exit gate:
-      - build passes; no behavior change when feature flag is off.
+  - What blocks normal transitions.
+  - What can never be blocked (critical path to LOCKDOWN).
 
-  Phase 2: Entry pipeline activation
+  5. Post-transition invariants
 
-  - Route genesis/entry through compile/verify/apply/attest path.
-  - Emit ENTRY_* markers and reject markers.
-  - Exit gate:
-      - clean matrix run with ENTRY_* required markers.
+  - Must-hold guarantees immediately after transition (scheduler binding, capability visibility, memory/TLB scrub, audit record presence).
 
-  Phase 3: Scheduler/lease hardening
+  If you want, I can draft a concrete “Transition Contract Freeze” document next with a table of from -> to, authority, prerequisites, rejection codes, and mandatory postconditions.
 
-  - Add epoch-aware lease checks at scheduler boundaries.
-  - Enforce stale lease rejection with deterministic markers.
-  - Exit gate:
-      - negative probes prove stale lease cannot dispatch.
 
-  Phase 4: API cleanup and occupant isolation
+› Casual to Secure is a valid transition. It can either be by the user, or when a threat requiring the escalation is detected. It does not require authentication. Casual to Lockdown has similar conditions to Secure, except it requires authentication. If the system
+  prompted the change from Casual to Lockdown, failing to input the key, or inputting the wrong key a few times, will cause the OS to shut down, and boot directly into Lockdown. Casual to Ghost is purely a manual process; the system can't prompt into Ghost. It
+  requires authentication. Secure to Lockdown has similar conditions as Casual to Lockdown. Secure to Casual requires a cooldown period and authentication. Secure to Ghost as similar conditions as Casual to Secure. Lockdown can only move to Secure, and that requires a
+  special de-escalation key if manually prompted, or a de-escalation period and authentication of prompted by system. Ghost can't exit to Casual. It can only move to Secure, which requires authentication and is manual, or to Lockdown, which is required if a threat
+  breaches, and is automatic. I believe that covers everything, right?
 
-  - Remove/leash SYS_MODE_QUERY leak according to chosen policy.
-  - Update userland probes and ABI docs.
-  - Exit gate:
-      - occupant probes cannot infer raw mode.
 
-  Phase 5: Performance and regression closure
+• Almost, but not fully. You covered most paths, but there are still gaps and a few contradictions to resolve before freezing policy.
 
-  - Measure syscall/scheduler overhead pre/post (same workload and mode mix).
-  - Validate caching effectiveness and marker completeness.
-  - Exit gate:
-      - no unacceptable regression vs baseline and matrix remains green.
+  What’s still missing / inconsistent
 
-• Plan quality upgrades to apply immediately
+  1. MODE_VOID -> MODE_CASUAL boot transition policy is not specified.
+  2. Same-mode requests (CASUAL->CASUAL, etc.) behavior is not specified (no-op vs reject).
+  3. SECURE -> GHOST and GHOST -> SECURE now appear valid in your policy, but they are currently illegal in existing docs/state machine. This is a major contract change.
+  4. Lockdown de-escalation changed from LOCKDOWN->CASUAL (old docs) to LOCKDOWN->SECURE (new policy). Also major contract change.
+  5. “Prompted by system” flow is undefined:
+      - timeout duration
+      - retry count
+      - what runs while waiting
+      - what exactly triggers forced reboot-to-Lockdown
+  6. Authentication is underspecified:
+      - factor type per transition
+      - failure handling
+      - unavailable auth backend behavior (fail-closed?)
 
-  - Convert vague goals into verifiable invariants:
-      - each invariant must name enforcement point + failure marker.
-  - Require "negative proof" for every new law:
-      - one intentional violation test that must fail.
-  - Separate architecture decisions from implementation tasks:
-      - ADR-style mini record for each irreversible ABI decision.
-  - Add rollback strategy per phase:
-      - feature flag or fallback path defined before phase start.
-  - Track ownership explicitly:
-      - each checklist item has one owner and one completion artifact.
-  - Prevent doc drift:
-      - no policy doc merge unless conformance matrix row is updated.
+  You should freeze these next
+
+  1. Full transition matrix with explicit allowed/denied for all 16 pairs.
+  2. Per-edge authority (USER, DAEMON, KERNEL_AUTO) and precedence if simultaneous requests occur.
+  3. Per-edge preconditions (threat class, cooldown duration, manual-only flags).
+  4. Per-edge auth policy (required factor(s), retries, timeout, lockout result).
+  5. Per-edge postconditions (scrub, capability visibility, scheduler envelope, Fate record with accepted/rejected result_code).
+
+  If you want, I can draft the exact canonical matrix + guard conditions in a new docs/components/modes/transition_contract_freeze.md so implementation can follow it without ambiguity.
+
+
+› ...Void? What is that mode for?
+
+
+• MODE_VOID is an internal bootstrap state, not an operational user mode.
+
+  In this codebase/docs, it represents “not yet initialized” before the mode subsystem completes startup and transitions into MODE_CASUAL. It’s mainly there for safety and state-machine clarity, so subsystems can treat pre-init as a distinct state instead of assuming
+  Casual too early.
+
+  So practically:
+
+  - User-facing modes: CASUAL, SECURE, LOCKDOWN, GHOST
+  - Internal-only state: VOID (boot/uninitialized)
+
+
+› In that case, Void saves the current mode on shut down, and enters that mode on boot. For the current point in development, what information do we need to flesh out?
+• To implement “VOID saves last mode on shutdown and restores on boot” safely, you need to define these now:
+
+  2. Trust and tamper model
+
+  - Is the stored mode authenticated (HMAC/signature)?
+  3. Restore policy matrix
+
+  - Which modes are restorable directly at boot.
+  - Recommended explicit rules:
+      - restore CASUAL/SECURE normally
+      - LOCKDOWN requires preserved lockdown boot intent
+      - GHOST should not be resumed as-is; re-enter via fresh manual authenticated flow
+
+  4. Shutdown semantics
+
+  - Exactly when mode is committed (graceful shutdown only? panic too?).
+  - On abrupt power loss, what stale-mode behavior is acceptable.
+
+  5. Boot precedence rules
+
+  - Priority between: persisted mode, kernel emergency signal, hardware recovery flag, manual boot override.
+  - Define one deterministic order.
+
+  6. Auth requirements at boot
+
+  - Whether restoring into LOCKDOWN/GHOST requires immediate auth gate before userland starts.
+  - Retry/timeout/lockout behavior.
+
+  7. Audit/Fate integration
+
+  - Boot restore must emit Fate/event records:
+      - requested mode
+      - source (BOOT_RESTORE)
+      - accepted/rejected + reason code
+
+  8. Test/closure requirements
+
+  - Add deterministic tests for:
+      - valid restore
+      - tampered record
+      - corrupted record
+      - forbidden restore (e.g., Ghost resume)
+      - fallback behavior and markers
+
+  If you want, I can draft the exact boot-restore contract and marker set as a docs/components/modes/void_boot_restore_contract.md spec next.
+
+
+› Based on the docs and plans, and existing scripts, which of these questions already has an answer?
+
+
+• I’ll map your eight boot-restore questions against what’s already specified in the current docs/plans/scripts and call out exactly what is answered vs still undefined.
+
+• Explored
+    Search MODE_VOID|mode_init|boot|restore|persist|persistence|NVRAM|checksum|HMAC|signature|fallback|tamper|shutdown|power loss|LOCKDOWN|GHOST|boot override|BOOT_RESTORE|transition_source|Fate|result_code|verify_matrix|marker in docs
+    Read mode.c
+
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• Explored
+
+  1. Persistence contract (where/how mode is stored)
+
+  - Status: No
+  - I found no defined persisted record format (mode/seq/checksum/version) for boot restore.
+  2. Trust/tamper model for persisted mode
+
+  3. Restore policy matrix (which modes can be restored on boot)
+
+  - Status: Partially answered (current behavior only)
+  - Current implementation always initializes to VOID then transitions to CASUAL.
+  - Evidence: mode_api.md, mode.c
+
+  4. Shutdown semantics (when commit happens, graceful vs crash)
+
+  - Status: No
+
+  5. Boot precedence rules (persisted mode vs emergency flags vs overrides)
+
+  - Status: No
+
+  6. Auth requirements at boot for restored mode
+
+  - Status: Partially answered in policy docs, not kernel contract
+  - Docs define auth requirements for transitions/de-escalation, but not a boot-restore auth flow.
+  - Evidence: lockdown_mode_policy.txt, secure_mode_policy.txt, ghost_mode_policy.txt
+
+  7. Audit/Fate integration for boot restore
+
+  - Status: Partially answered
+  - Transition auditing is implemented (accepted/rejected, envelope markers), but no BOOT_RESTORE source/event contract.
+  - Evidence: mode.h, mode.c, day5r_envelope_multimode_logic.md
+
+  8. Test/closure requirements for restore path
+
+  - Evidence: run_law2_fate_matrix.sh, run_day30_closure_suite.sh
+
+  Important note: your new intended transition policy also conflicts with current enforced legality in code/docs (for example GHOST -> SECURE currently denied). We should resolve that before adding boot-restore logic.
+
+
+› I want to use my current proposal. Read through the .txt files that dictate the mode policies for more information to best direct how we answer these questions, and for a better understanding of the modes. Note, those are the first drafts, not the final definitions.
+  They were also made without context on the current development

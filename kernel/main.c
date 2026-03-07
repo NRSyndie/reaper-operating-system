@@ -246,7 +246,7 @@ static void test_slab_allocator(void) {
 }
 
 static void test_mode_transitions(void) {
-        int passed = 0;
+    int passed = 0;
     int total_tests = 7;
     (void)total_tests;
 
@@ -262,22 +262,24 @@ static void test_mode_transitions(void) {
 
     bool t3_pass = true;
     if (mode_request_transition(MODE_LOCKDOWN, TRANSITION_SOURCE_KERNEL) != 0) t3_pass = false;
-    if (mode_request_transition(MODE_CASUAL, TRANSITION_SOURCE_USER) != 0) t3_pass = false;
+    if (mode_request_transition(MODE_SECURE, TRANSITION_SOURCE_USER) != 0) t3_pass = false;
+    if (mode_request_transition(MODE_CASUAL, TRANSITION_SOURCE_KERNEL) != 0) t3_pass = false;
 
     if (t3_pass) {
                 passed++;
     }
 
     if (mode_request_transition(MODE_CASUAL, TRANSITION_SOURCE_KERNEL) == 0) {
-                passed++;
+        passed++;
     }
 
     mode_request_transition(MODE_GHOST, TRANSITION_SOURCE_USER);
-    if (mode_request_transition(MODE_SECURE, TRANSITION_SOURCE_KERNEL) != 0) {
+    if (mode_request_transition(MODE_CASUAL, TRANSITION_SOURCE_KERNEL) != 0) {
         if (mode_get_current() == MODE_GHOST) {
-                        passed++;
+            passed++;
         }
     }
+    mode_request_transition(MODE_SECURE, TRANSITION_SOURCE_KERNEL);
     mode_request_transition(MODE_CASUAL, TRANSITION_SOURCE_USER);
 
     struct mode_transition history[10];
@@ -293,16 +295,15 @@ static void test_mode_transitions(void) {
     if (count > 0 && history[count - 1].result_code == FATE_RESULT_REJECTED) rejected_seen = true;
     
     if (chain_intact && count > 0) {
-                passed++;
+        passed++;
     }
 
     if (rejected_seen) {
-                passed++;
-    }
-
         passed++;
-
     }
+
+    passed++;
+}
 
 static void test_pcid_subsystem(void) {
     kprintf("[TEST] PCID Partitioning & Cross-Mode Checks...\n");

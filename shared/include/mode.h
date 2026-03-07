@@ -16,6 +16,29 @@ typedef enum {
 } mode_id_t;
 
 typedef enum {
+    MODE_REJECT_NONE                     = 0,
+    MODE_REJECT_TARGET_INVALID           = 1,
+    MODE_REJECT_SOURCE_INVALID           = 2,
+    MODE_REJECT_EDGE_ILLEGAL             = 3,
+    MODE_REJECT_AUTH_REQUIRED            = 4,
+    MODE_REJECT_SPECIAL_KEY_REQUIRED     = 5,
+    MODE_REJECT_SYSTEM_PROMPT_REQUIRED   = 6,
+    MODE_REJECT_COOLDOWN_ACTIVE          = 7,
+    MODE_REJECT_DEESC_WINDOW_ACTIVE      = 8,
+    MODE_REJECT_BOOT_POLICY              = 9,
+    MODE_REJECT_AUTH_RETRY_LIMIT         = 10
+} mode_reject_reason_t;
+
+#define MODE_AUTH_PASSWORD            (1u << 0)
+#define MODE_AUTH_SPECIAL_KEY         (1u << 1)
+#define MODE_AUTH_SYSTEM_PROMPT       (1u << 2)
+#define MODE_AUTH_COOLDOWN_ELAPSED    (1u << 3)
+#define MODE_AUTH_DEESC_ELAPSED       (1u << 4)
+#define MODE_AUTH_AUTOMATIC           (1u << 5)
+#define MODE_AUTH_BOOT_INTENT         (1u << 6)
+#define MODE_AUTH_MANUAL              (1u << 7)
+
+typedef enum {
     FATE_RESULT_ACCEPTED = 0,
     FATE_RESULT_REJECTED = 1
 } fate_result_t;

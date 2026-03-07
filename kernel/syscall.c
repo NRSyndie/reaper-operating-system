@@ -593,7 +593,17 @@ uint64_t syscall_dispatcher(uint64_t num, uint64_t a0, uint64_t a1, uint64_t a2,
                 ret = (uint64_t)-1;
                 break;
             }
-            ret = (uint64_t)mode_request_transition((mode_id_t)a0, TRANSITION_SOURCE_USER);
+            if ((a1 & ~((uint64_t)(MODE_AUTH_PASSWORD |
+                                   MODE_AUTH_SPECIAL_KEY |
+                                   MODE_AUTH_SYSTEM_PROMPT |
+                                   MODE_AUTH_COOLDOWN_ELAPSED |
+                                   MODE_AUTH_DEESC_ELAPSED |
+                                   MODE_AUTH_MANUAL))) != 0) {
+                g_sys_metrics.invalid_rejects++;
+                ret = (uint64_t)-1;
+                break;
+            }
+            ret = (uint64_t)mode_request_transition_ex((mode_id_t)a0, TRANSITION_SOURCE_USER, (uint32_t)a1);
             break;
 
         case SYS_CAP_INVOKE: {

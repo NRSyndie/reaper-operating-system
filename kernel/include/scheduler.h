@@ -125,6 +125,7 @@ void scheduler_set_state(thread_t* thread, thread_state_t new_state);
  * scheduler_get_metrics: Snapshot per-CPU scheduler metrics.
  */
 void scheduler_get_metrics(sched_metrics_t* out);
+uint64_t scheduler_get_global_tick(void);
 
 /**
  * scheduler_get_current: Returns the soul currently inhabiting the CPU.

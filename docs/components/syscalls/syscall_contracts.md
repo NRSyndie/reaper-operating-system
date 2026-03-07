@@ -28,12 +28,13 @@ Kernel translates gate op -> internal handler id and applies the same validation
 ABI:
 
 - `a0`: target mode (`MODE_CASUAL|MODE_SECURE|MODE_LOCKDOWN|MODE_GHOST`)
+- `a1`: auth evidence flags (`MODE_AUTH_*`)
 
 Required invariants:
 
 - Transition is evaluated by kernel envelope pipeline (`compile -> verify -> apply -> attest`).
 - Illegal transitions fail closed with `-1`.
-- Legacy mode transition legality is preserved under envelope verification.
+- Transition policy checks include source legality, auth requirements, and cooldown/de-escalation windows.
 
 ## `GATE_OP_CAP_MINT` (3)
 
@@ -138,6 +139,7 @@ Record semantics:
 - `result_code` values:
   - `0`: accepted transition event
   - `1`: rejected/illegal transition attempt
+- For transition records (`record_type == 0`), `fault_error_code` carries deterministic policy reject reason code (`MODE_REJECT_*`) on rejected events.
 - Fault metadata fields (for `record_type == 1`):
   - `fault_vector`: x86 exception vector
   - `fault_error_code`: low 32 bits of CPU error code
