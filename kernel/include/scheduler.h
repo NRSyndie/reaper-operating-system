@@ -4,11 +4,12 @@
 #include "thread.h"
 #include "mode.h"
 
-#define SCHED_MAX_CPUS 4
+#define SCHED_MAX_CPUS 64
 #define DEFAULT_QUANTUM 10
 #define SCHED_REAP_BUDGET 16
 #define SCHED_MIN_REFILL_PERIOD 1
 #define SCHED_DEFAULT_MAX_ACCUMULATED (DEFAULT_QUANTUM * 4U)
+#define SCHED_STALL_THRESHOLD 1000
 
 typedef enum {
     SCHED_CLASS_NORMAL = 0,
@@ -62,6 +63,8 @@ typedef struct {
     uint64_t denied_dispatch;
     uint64_t denied_no_auth;
     uint64_t denied_mode_mismatch;
+    uint64_t denied_steal_mode;
+    uint64_t denied_steal_auth;
     uint64_t budget_exhaustions;
     uint64_t envelope_switches;
     uint64_t active_security_epoch;
@@ -70,6 +73,8 @@ typedef struct {
     uint32_t ready_depth;
     uint32_t zombie_depth;
 } sched_metrics_t;
+
+void scheduler_cpu_init(void);
 
 /**
  * scheduler_init: Initialize the Law of Time.
@@ -155,5 +160,6 @@ void scheduler_revoke_thread_immediate(thread_t* thread);
 void scheduler_revoke_process_immediate(process_t* proc);
 bool scheduler_self_test_deterministic_rr(void);
 bool scheduler_self_test_atomic_budget(void);
+bool scheduler_self_test_starvation(void);
 
 #endif /* REAPER_SCHEDULER_H */

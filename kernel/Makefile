@@ -17,7 +17,7 @@ ASFLAGS = -g
 LDFLAGS = -nostdlib -T linker.ld
 
 # --- Source Files ---
-SRCS_C = main.c console.c serial.c pmm.c vmm.c mode.c limine_reqs.c cpu.c pcid.c slab.c capability.c idt.c gdt.c klog.c syscall.c process.c thread.c scheduler.c genesis.c elf.c lattice.c kmalloc.c ocular.c entry.c power.c
+SRCS_C = main.c console.c serial.c pmm.c vmm.c mode.c limine_reqs.c acpi.c cpu.c pcid.c slab.c capability.c idt.c gdt.c klog.c syscall.c process.c thread.c scheduler.c genesis.c elf.c lattice.c kmalloc.c ocular.c entry.c power.c audit.c dmar.c iommu.c dma.c pku.c cet.c blake3/blake3.c blake3/blake3_portable.c blake3/blake3_dispatch.c
 SRCS_ASM = interrupts.s
 
 OBJS = $(SRCS_ASM:.s=.o) $(SRCS_C:.c=.o)
@@ -55,7 +55,7 @@ else
 endif
 
 # --- Main Targets ---
-.PHONY: all run iso clean limine_build verify_matrix verify_day28 verify_day29 verify_day30
+.PHONY: all run iso clean limine_build verify_matrix verify_day28 verify_day29 verify_day30 verify_day31 verify_day32 verify_day33 verify_day34 verify_final_gate verify_final_release
 all: $(KERNEL_ELF)
 
 LOG_DIR_TARGET := $(LOG_DIR)
@@ -81,6 +81,30 @@ verify_day29: iso
 verify_day30: iso
 	$(VECHO) "  VERIFY  Day 30 fate rejection auditing closure suite"
 	$(Q)../tools/run_day30_closure_suite.sh --runs 3 --timeout 35 --iso $(ISO_FILE) --out-dir .
+
+verify_day31: iso
+	$(VECHO) "  VERIFY  Day 31 revalidation closure suite"
+	$(Q)../tools/run_day31_closure_suite.sh --runs 3 --timeout 35 --iso $(ISO_FILE) --out-dir .
+
+verify_day32: iso
+	$(VECHO) "  VERIFY  Day 32 fault-to-string closure suite"
+	$(Q)../tools/run_day32_closure_suite.sh --runs 3 --timeout 35 --iso $(ISO_FILE) --out-dir .
+
+verify_day33: iso
+	$(VECHO) "  VERIFY  Day 33 full-context closure suite"
+	$(Q)../tools/run_day33_closure_suite.sh --runs 3 --timeout 35 --iso $(ISO_FILE) --out-dir .
+
+verify_day34: iso
+	$(VECHO) "  VERIFY  Day 34 real-fault closure suite"
+	$(Q)../tools/run_day34_closure_suite.sh --runs 3 --timeout 35 --iso $(ISO_FILE) --out-dir .
+
+verify_final_gate: iso
+	$(VECHO) "  VERIFY  Final redesign gate (build + matrix + day28-34)"
+	$(Q)../tools/run_final_release_gate.sh --lock-runs 3 --timeout 45 --iso $(ISO_FILE) --out-dir .
+
+verify_final_release: iso
+	$(VECHO) "  VERIFY  Final redesign release lock (5 runs)"
+	$(Q)../tools/run_final_release_gate.sh --lock-runs 5 --timeout 45 --iso $(ISO_FILE) --out-dir .
 
 # Build Limine from source using local directory
 limine_build:

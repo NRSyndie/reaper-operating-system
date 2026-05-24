@@ -3,15 +3,57 @@
 ## Objective
 Execute the approved Epoch III strategy with security-first sequencing, measurable performance guardrails, and explicit vision continuity milestones.
 
+## 2026-04-29 Progress Snapshot
+- Audit Subsystem hardening landed (Day 83):
+  - 128-byte aligned `audit_record_t` implemented and verified.
+  - SMP-safe atomic ring buffer (1024 slots) with Acquire/Release semantics.
+  - BLAKE3-backed record chaining and reality-bound seed rotation on Phase Shift.
+  - Instrumentation for Threads, Capabilities (Mint/Denial), Scheduler Stall, and Phase Shifts.
+  - Overflow transparency via explicit `AUDIT_EVENT_OVERFLOW` and `gap_seq` tracking.
+  - `RDRAND`-first root seed path with explicit weak fallback retained as the remaining Ghost-mode hardening item.
+- ACPI Layer 1/2 foundation landed (Day 84):
+  - Limine RSDP handoff integrated into `acpi_init()`.
+  - Static MADT, FADT, HPET, MCFG, and DMAR parsing added for later hardware bring-up.
+  - Boot self-test marker `[TEST] ACPI Layer 1+2: SUCCESS.` verified in serial logs.
+- DMA authority contract + DMAR truth freeze landed (Day 86):
+  - canonical IOMMU inventory state model added
+  - explicit degraded/unavailable classification added
+  - ACPI DMAR export became the sole firmware truth path for IOMMU inventory
+  - boot self-test markers for inventory and degraded policy verified in serial logs
+- Paradigm stack baseline closure landed (Day 87):
+  - serial evidence confirmed the early user fault below `rsp=0x800000`
+  - Genesis stack mapping widened from 1 page to 8 pages
+  - runtime confidence revalidated with three consecutive clean matrix invocations
+- Slot 1 standard microkernel Step 3 landed:
+  - baseline `rwlock` primitives added
+  - baseline `seqlock` primitives added
+  - baseline `rcu` primitives added
+  - deterministic boot self-tests added in kernel for all three primitives
+- Slot 1 standard microkernel Step 4 landed:
+  - buffered IPC endpoint queues added
+  - split send/receive wait queues added
+  - rights-aware endpoint invocation validated
+- Runtime confidence check rerun:
+  - `make -C kernel verify_matrix` passed (3/3) after Slot 1 Step 3 changes.
+- Runtime confidence baseline refreshed:
+  - `make -C kernel verify_matrix` passed in three consecutive invocations after the Day 87 stack fix.
+- Current standard slot follow-up:
+  - Slot 1 Step 5 memory-path rollout evidence is landed.
+  - Remaining slot work is now priority/policy expansion, multicore runtime activation, and later IPC call-chain tracking.
+
 ## Workstream 1 — Security Contracts (Priority 0)
-### 1.1 `SYS_AUDIT` semantics
-- Define target identity model and delegation rules.
-- Define capability requirements and monotonic authority constraints.
-- Add syscall contract notes and ABI-facing error semantics.
+### 1.1 `SYS_AUDIT` / Fate Strings Foundation
+- [DONE] Define 128-byte record and 1024-slot lattice.
+- [DONE] Implement SMP-safe atomic ring buffer.
+- [DONE] Implement Reality-bound seed rotation.
+- [DONE] Instrument Scheduler Stall, Thread Lifecycle, and Capability Mint/Denial.
+- [OPEN-RISK] Durable sealed-storage or equivalent Ghost-mode root seed hardening.
+- [OPEN-RISK] VT-d translation enablement and invalidation lifecycle remain deferred after inventory freeze.
 
 **Acceptance gate**
-- Contract doc updated and reviewed.
-- Negative-path probes defined for unauthorized target access and malformed arguments.
+- [DONE] Contract doc updated and reviewed.
+- [DONE] static_assert verified.
+- [DONE] Reality seed rotation confirmed in logs.
 
 ### 1.2 Zero-residue hardening completion
 - Finalize cross-color context scrub policy.
@@ -36,7 +78,8 @@ Execute the approved Epoch III strategy with security-first sequencing, measurab
 - [DONE] Implement root/thread scheduling authority model.
 - [DONE] Enforce atomic process-budget consume/refill invariants.
 - [DONE] Deterministic weighted RR with fairness probes.
-- [TODO] Add starvation upper-bound marker under mixed workload.
+- [OPEN-RISK] Add starvation upper-bound marker under mixed workload.
+  Source: mixed-workload tail-latency bounds are not yet exposed as a dedicated runtime marker in `kernel/scheduler.c`.
 - [DONE] Finalized BSP-only ESAK profile marker (`[TEST] ESAK IPI profile: BSP_ONLY`) for closure scope.
 
 **Acceptance gate**
@@ -62,7 +105,7 @@ Execute the approved Epoch III strategy with security-first sequencing, measurab
 - Compatibility contract documented and validated in runtime boot checks.
 
 ### 3.2 Daemon authority partitioning
-- Define minimal capability surfaces for Aegis/Archivist/Sage/Cipher/Sentinel.
+- Define minimal capability surfaces for Genesis, Paradigm, Archive, Sage, Tunnel, Veil, and Paradigm's embedded Sentinel subsystem.
 - Document derivation boundaries and delegation flow.
 
 **Acceptance gate**

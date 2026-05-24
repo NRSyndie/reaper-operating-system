@@ -1,12 +1,12 @@
-# Day 28 Final Report: Law 2 Strict Adoption Pass (Paradigm Migration)
+# Epoch III, Day 72: Law 2 Closure Hardening (Kernel Attestation + Strict-Only Cutover)
 
 ## 1. Overview
-Day 28 completed the first user-space adoption pass for **Law 2: Shadow Mapping** strict semantics. The strict map path introduced on Day 27 is now exercised by Paradigm's primary mapping sequence.
+Day 72 completed the first user-space adoption pass for **Law 2: Shadow Mapping** strict semantics. The strict map path introduced on Day 27 is now exercised by Paradigm's primary mapping sequence.
 
 ## 2. Infrastructure & Implementation
 
 ### A. Paradigm Strict Path Migration
-- Replaced legacy `sys_map(...)` calls in the Shadow Mapping chain with `sys_map_strict(...)`.
+- Replaced legacy `sys_map(...)` calls in the Shadow Mapping chain with `sys_map_strict(...)` (historical Day 28 wrapper; removed in Day 72 when strict path became default `sys_map(...)`).
 - This applies to all non-leaf and leaf links in the staged recursive mapping path used by Paradigm.
 
 ### B. Strict Negative-Path Probes

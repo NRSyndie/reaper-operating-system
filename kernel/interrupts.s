@@ -400,6 +400,66 @@ timer_stub:
     iretq
 
 /*
+ * ipi_resched_stub
+ * Handles scheduler reschedule IPIs.
+ */
+.global ipi_resched_stub
+.extern cpu_handle_resched_ipi
+ipi_resched_stub:
+    pushq %rax
+    pushq %rcx
+    pushq %rdx
+    pushq %rsi
+    pushq %rdi
+    pushq %r8
+    pushq %r9
+    pushq %r10
+    pushq %r11
+
+    call cpu_handle_resched_ipi
+
+    popq %r11
+    popq %r10
+    popq %r9
+    popq %r8
+    popq %rdi
+    popq %rsi
+    popq %rdx
+    popq %rcx
+    popq %rax
+    iretq
+
+/*
+ * ipi_tlb_stub
+ * Handles TLB shootdown IPIs.
+ */
+.global ipi_tlb_stub
+.extern cpu_handle_tlb_ipi
+ipi_tlb_stub:
+    pushq %rax
+    pushq %rcx
+    pushq %rdx
+    pushq %rsi
+    pushq %rdi
+    pushq %r8
+    pushq %r9
+    pushq %r10
+    pushq %r11
+
+    call cpu_handle_tlb_ipi
+
+    popq %r11
+    popq %r10
+    popq %r9
+    popq %r8
+    popq %rdi
+    popq %rsi
+    popq %rdx
+    popq %rcx
+    popq %rax
+    iretq
+
+/*
  * isr_spurious_39 (IRQ 7)
  */
 .global isr_spurious_39

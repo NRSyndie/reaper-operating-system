@@ -46,14 +46,16 @@ typedef enum {
 typedef enum {
     FATE_RECORD_TRANSITION = 0,
     FATE_RECORD_FAULT      = 1,
-    FATE_RECORD_LATTICE    = 2
+    FATE_RECORD_LATTICE    = 2,
+    FATE_RECORD_ATTEST     = 3
 } fate_record_type_t;
 
 typedef enum {
     FATE_READ_ALL         = 0,
     FATE_READ_TRANSITIONS = 1,
     FATE_READ_FAULTS      = 2,
-    FATE_READ_LATTICE     = 3
+    FATE_READ_LATTICE     = 3,
+    FATE_READ_ATTEST      = 4
 } fate_read_mode_t;
 
 typedef enum {

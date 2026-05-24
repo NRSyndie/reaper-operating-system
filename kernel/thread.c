@@ -8,6 +8,7 @@
 #include "include/scheduler.h"
 #include "include/klog.h"
 #include "include/mode.h"
+#include "include/audit.h"
 
 static uint32_t next_tid = 1;
 static slab_cache_t* thread_cache = NULL;
@@ -91,12 +92,20 @@ thread_t* thread_create(process_t* owner, void (*entry)(void)) {
     
     t->rsp = t->kernel_stack_top - (8 * 8);
 
-    
+    audit_meta_t meta = {0};
+    meta.sched.tid = t->tid;
+    meta.sched.auth_status = t->sched_auth_mode;
+    audit_strike(AUDIT_EVENT_THREAD_CREATE, AUDIT_RESULT_OK, owner ? owner->pid : 0, meta);
+
     return t;
 }
 
 void thread_destroy(thread_t* thread) {
     if (!thread) return;
+
+    audit_meta_t meta = {0};
+    meta.sched.tid = thread->tid;
+    audit_strike(AUDIT_EVENT_THREAD_DESTROY, AUDIT_RESULT_OK, thread->owner ? thread->owner->pid : 0, meta);
 
     process_t* owner = thread->owner;
 

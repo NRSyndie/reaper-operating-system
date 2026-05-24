@@ -79,7 +79,7 @@ ABI:
 - `a1`: table index (`0..511`).
 - `a2`: child capability slot (must be non-zero).
 - `a3`: requested PTE flags.
-- `a4 bit0`: tolerated strict marker for ABI continuity (semantics are strict regardless).
+- `a4`: strict control word, must equal `1` (`SYS_MAP_STRICT_FLAG`).
 
 Required invariants:
 
@@ -98,13 +98,21 @@ ABI:
 
 - `a0`: parent page-table capability slot.
 - `a1`: table index (`0..511`).
-- `a2 bit0`: tolerated strict marker for ABI continuity (semantics are strict regardless).
+- `a2`: strict control word, must equal `1` (`SYS_UNMAP_STRICT_FLAG`).
 
 Required invariants:
 
 - Parent capability must be `CAP_TYPE_PAGETABLE`.
 - Parent must include `CAP_RIGHT_WRITE`.
 - Index must be in range.
+- Strict control words other than `1` are rejected and counted as explicit Day 29 reject evidence.
+- Day 29 reject classes are reason-coded in kernel metrics/attestation:
+  - `LAW2_DAY29_REASON_AUTH_OK`
+  - `LAW2_DAY29_REASON_CTRL_DENY`
+  - `LAW2_DAY29_REASON_PARENT_DENY`
+  - `LAW2_DAY29_REASON_RIGHTS_DENY`
+  - `LAW2_DAY29_REASON_INDEX_DENY`
+- Strict-unmap performance evidence is tracked with bounded max-latency budget.
 
 ## `SYS_FATE_READ` (14)
 
@@ -118,6 +126,7 @@ ABI:
   - `1`: transition records only
   - `2`: fault records only
   - `3`: lattice attach/detach records only
+  - `4`: kernel attestation records only
 
 Required invariants:
 
@@ -126,8 +135,20 @@ Required invariants:
 - Destination buffer must be 8-byte aligned.
 - Destination range must be mapped writable in caller address space.
 - Count is capped internally (currently `128`).
-- Read mode outside `{0,1,2,3}` must fail with `-1`.
+- Read mode outside `{0,1,2,3,4}` must fail with `-1`.
 - Kernel copy count must remain bounded by requested count and fail closed on mismatch.
+- Day 32 closure requires:
+  - fault-only filter isolation (no non-fault records in `FATE_READ_FAULTS` reads)
+  - minimum fault metadata completeness checks in runtime probes
+  - bounded fault-read runtime budget evidence (`DAY32_FAULT_READ_BUDGET_CYCLES`)
+- Day 33 closure requires:
+  - full-context integrity checks across sampled fault records (`RIP/RSP/CS/RFLAGS`; `CR2` for #PF)
+  - fault-vector sanity checks in sampled fault windows
+  - bounded full-context audit budget evidence (`DAY33_FULL_CONTEXT_AUDIT_BUDGET_CYCLES`)
+- Day 34 closure requires:
+  - real-path lattice first-touch #PF evidence in sampled fault windows
+  - sampled real-fault user-provenance checks (`trigger_source == TRANSITION_SOURCE_USER`, non-zero requestor PID)
+  - bounded real-fault audit budget evidence (`DAY34_REAL_FAULT_AUDIT_BUDGET_CYCLES`)
 
 Record semantics:
 
@@ -136,6 +157,7 @@ Record semantics:
   - `0`: transition record
   - `1`: fault record
   - `2`: lattice forensics record
+  - `3`: kernel attestation record
 - `result_code` values:
   - `0`: accepted transition event
   - `1`: rejected/illegal transition attempt
@@ -154,6 +176,43 @@ Record semantics:
   - `fault_error_code`: lattice page count
   - `fault_rip`: role (`1`: source/RW, `0`: listener/RO)
   - `fault_cr2`: lattice attachment base virtual address
+
+- Attestation metadata fields (for `record_type == 3`):
+  - `fault_vector`: attested day id (`28`, `29`, `30`)
+  - `result_code`: `0` pass, `1` fail
+  - `fault_error_code`: deterministic reject reason code
+  - `fault_rip`: compact evidence detail counter
+
+## `GATE_OP_LAW2_ATTEST` (26)
+
+ABI:
+
+- `a0`: user destination buffer (`gate_law2_attest_t*`)
+- `a1`: destination size (must be `>= sizeof(gate_law2_attest_t)`)
+
+Required invariants:
+
+- Caller buffer must be writable user memory for full struct size.
+- Kernel computes Day 28/29/30 closure status from kernel-owned evidence only.
+- Kernel appends attestation Fate records (`record_type == 3`) for days `28`, `29`, `30`.
+- Kernel emits deterministic `[LAW2_ATTEST]` markers with fixed day/result fields.
+- Day 29 attestation includes:
+  - `day29_reason_mask` with required reject-class coverage bitmask.
+  - `day29_unmap_cycles_max` and `day29_unmap_cycles_avg`.
+  - `day29_perf_budget_cycles` release budget for strict-unmap latency.
+- Day 30 attestation includes:
+  - `day30_reason_mask` with required reject-class coverage bitmask.
+  - `day30_reject_scan_cycles` Fate-reject scan latency evidence.
+  - `day30_perf_budget_cycles` release budget for scan latency.
+- Day 31 revalidation contract consumes two consecutive `GATE_OP_LAW2_ATTEST` snapshots and requires:
+  - Day 28/29/30 status parity (`PASS` on both snapshots).
+  - Day 29/30 reason-mask parity plus required-mask coverage.
+  - Day 29/30 budget parity and bounded inter-snapshot metric drift.
+
+Return behavior:
+
+- `0` when arguments and user-buffer copy succeed (authoritative per-day status is read from `day28_status`, `day29_status`, `day30_status` fields).
+- `-1` when arguments are invalid or user-buffer validation/copy fails.
 
 ## Auditor Contract (Epoch II Closure Note)
 
@@ -265,6 +324,9 @@ The kernel tracks counters for:
 - fault rejections, invalid-argument rejections, permission rejections
 - `SYS_MAP`/strict-map calls and failure reasons (strict is always on)
 - `SYS_UNMAP`/strict-unmap calls (strict is always on)
+- strict-unmap reject classes (control/parent/rights/index) + success count
+- strict-unmap latency totals/max for Day 29 performance gates
+- Day 30 reject-reason coverage bitmask and attestation scan latency budget
 - TLB flush count from mapping operations
 
 Periodic diagnostics are emitted from the syscall path to support rollout validation.

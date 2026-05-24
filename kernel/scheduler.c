@@ -14,6 +14,7 @@
 #include "include/utils.h"
 #include "include/klog.h"
 #include "include/kmalloc.h"
+#include "include/audit.h"
 
 /* Assembly context switch function */
 extern void context_switch(uint64_t* old_rsp, uint64_t new_rsp, void* old_ext, void* new_ext, uint8_t fpu_mode);
@@ -30,9 +31,12 @@ typedef struct {
     uint64_t denied_dispatch;
     uint64_t denied_no_auth;
     uint64_t denied_mode_mismatch;
+    uint64_t denied_steal_mode;
+    uint64_t denied_steal_auth;
     uint64_t budget_exhaustions;
     uint64_t envelope_switches;
     uint64_t tick_count;
+    uint64_t last_stall_check;
     uint64_t active_security_epoch;
     mode_id_t active_mode;
     spinlock_t runq_lock;
@@ -76,6 +80,7 @@ static inline scheduler_cpu_state_t* sched_cpu_state_by_id(uint32_t cpu_id) {
 static inline void sched_request_resched(uint32_t cpu_id) {
     if (cpu_id >= SCHED_MAX_CPUS) cpu_id = 0;
     __atomic_store_n(&g_force_resched[cpu_id], 1, __ATOMIC_RELEASE);
+    cpu_request_resched_ipi(cpu_id);
 }
 
 static inline bool sched_consume_resched_request(uint32_t cpu_id) {
@@ -111,9 +116,18 @@ static inline scheduler_envelope_t* sched_active_envelope(scheduler_cpu_state_t*
 }
 
 static inline uint32_t sched_select_target_cpu(thread_t* thread) {
+    uint32_t online = cpu_get_online_count();
+    uint32_t desired;
+
     if (!thread) return 0;
-    if (thread->last_cpu < SCHED_MAX_CPUS) return thread->last_cpu;
-    return thread->tid % SCHED_MAX_CPUS;
+    if (online == 0) online = 1;
+    if (online > SCHED_MAX_CPUS) online = SCHED_MAX_CPUS;
+
+    desired = thread->last_cpu;
+    if (desired >= online) {
+        desired = thread->tid % online;
+    }
+    return desired;
 }
 
 static void sched_refresh_active_mode(scheduler_cpu_state_t* cpu) {
@@ -493,6 +507,7 @@ static uint32_t queue_depth(thread_t* head) {
 static thread_t* scheduler_pick_next_weighted_locked(scheduler_envelope_t* env) {
     uint32_t depth;
     thread_t* next;
+    uint64_t now = __atomic_load_n(&g_sched_global_tick, __ATOMIC_ACQUIRE);
     if (!env) return NULL;
 
     depth = queue_depth(env->ready_queue_head);
@@ -503,12 +518,27 @@ static thread_t* scheduler_pick_next_weighted_locked(scheduler_envelope_t* env) 
             continue;
         }
 
+        /* Starvation check */
+        if (next->last_dispatch_tick > 0 && (now - next->last_dispatch_tick) > SCHED_STALL_THRESHOLD) {
+            audit_meta_t stall_meta = {0};
+            stall_meta.sched.tid = next->tid;
+            stall_meta.raw[1] = now - next->last_dispatch_tick; // stall_ticks
+            audit_strike(AUDIT_EVENT_SCHED_STALL, AUDIT_RESULT_OK, (uint64_t)env->mode, stall_meta);
+
+            kprintf("[SCHED-STALL] tid=%u mode=%u stall_ticks=%lu\n",
+                    next->tid, (unsigned)env->mode, now - next->last_dispatch_tick);
+            /* Emergency token elevation */
+
+            next->sched_tokens += 5;
+        }
+
         if (next->sched_tokens == 0) {
             next->sched_tokens = next->sched_weight ? next->sched_weight : 1;
         }
 
         if (next->sched_tokens > 0) {
             next->sched_tokens--;
+            next->last_dispatch_tick = now;
             return next;
         }
 
@@ -518,6 +548,8 @@ static thread_t* scheduler_pick_next_weighted_locked(scheduler_envelope_t* env) 
 }
 
 static thread_t* scheduler_try_same_mode_steal(mode_id_t mode, uint32_t local_cpu_id) {
+    scheduler_cpu_state_t* local_cpu = sched_cpu_state_by_id(local_cpu_id);
+
     for (uint32_t donor_id = 0; donor_id < SCHED_MAX_CPUS; donor_id++) {
         scheduler_cpu_state_t* donor;
         scheduler_envelope_t* donor_env;
@@ -527,6 +559,14 @@ static thread_t* scheduler_try_same_mode_steal(mode_id_t mode, uint32_t local_cp
 
         donor = sched_cpu_state_by_id(donor_id);
         dflags = spinlock_irqsave(&donor->runq_lock);
+        
+        /* Deny if donor is in a different mode epoch/reality */
+        if (donor->active_mode != mode) {
+            local_cpu->denied_steal_mode++;
+            spinlock_irqrestore(&donor->runq_lock, dflags);
+            continue;
+        }
+
         donor_env = sched_envelope(donor, mode);
         stolen = scheduler_pick_next_weighted_locked(donor_env);
         if (stolen) {
@@ -572,6 +612,8 @@ void scheduler_get_metrics(sched_metrics_t* out) {
     out->denied_dispatch = cpu->denied_dispatch;
     out->denied_no_auth = cpu->denied_no_auth;
     out->denied_mode_mismatch = cpu->denied_mode_mismatch;
+    out->denied_steal_mode = cpu->denied_steal_mode;
+    out->denied_steal_auth = cpu->denied_steal_auth;
     out->budget_exhaustions = cpu->budget_exhaustions;
     out->envelope_switches = cpu->envelope_switches;
     out->active_security_epoch = cpu->active_security_epoch;
@@ -586,22 +628,30 @@ uint64_t scheduler_get_global_tick(void) {
     return __atomic_load_n(&g_sched_global_tick, __ATOMIC_ACQUIRE);
 }
 
-void scheduler_init(void) {
-    scheduler_cpu_state_t* cpu = sched_cpu_state();
+void scheduler_cpu_init(void) {
+    uint32_t cpu_id = cpu_get_id();
+    if (cpu_id >= SCHED_MAX_CPUS) return;
+
+    scheduler_cpu_state_t* cpu = &g_sched_states[cpu_id];
     mode_id_t mode_now = mode_get_current();
-    memset(g_sched_states, 0, sizeof(g_sched_states));
 
-    memset(&boot_process, 0, sizeof(boot_process));
-    memset(&boot_thread, 0, sizeof(boot_thread));
+    memset(cpu, 0, sizeof(scheduler_cpu_state_t));
 
-    for (uint32_t i = 0; i < SCHED_MAX_CPUS; i++) {
-        for (uint32_t m = MODE_VOID; m <= MODE_KERNEL; m++) {
-            g_sched_states[i].envelopes[m].mode = (mode_id_t)m;
-        }
-        g_sched_states[i].active_mode = sched_mode_valid(mode_now) ? mode_now : MODE_CASUAL;
-        g_sched_states[i].active_security_epoch = mode_get_security_epoch();
+    for (uint32_t m = MODE_VOID; m <= MODE_KERNEL; m++) {
+        cpu->envelopes[m].mode = (mode_id_t)m;
     }
 
+    cpu->active_mode = sched_mode_valid(mode_now) ? mode_now : MODE_CASUAL;
+    cpu->active_security_epoch = mode_get_security_epoch();
+}
+
+void scheduler_init(void) {
+    mode_id_t mode_now = mode_get_current();
+
+    /* 1. Initialize BSP's per-CPU state */
+    scheduler_cpu_init();
+
+    /* 2. Global scheduler state */
     __atomic_store_n(&g_sched_global_mode, (uint8_t)(sched_mode_valid(mode_now) ? mode_now : MODE_CASUAL), __ATOMIC_RELEASE);
     __atomic_store_n(&g_sched_global_security_epoch, mode_get_security_epoch(), __ATOMIC_RELEASE);
 
@@ -617,6 +667,7 @@ void scheduler_init(void) {
     boot_thread.ticks_remaining = DEFAULT_QUANTUM;
     boot_thread.sched_class = SCHED_CLASS_SYSTEM;
     boot_thread.last_cpu = 0;
+    boot_thread.last_dispatch_tick = 1;
     boot_thread.remaining_thread_budget = SCHED_DEFAULT_MAX_ACCUMULATED;
     boot_thread.max_slice = DEFAULT_QUANTUM;
     boot_thread.refill_period_ticks = DEFAULT_QUANTUM;
@@ -636,7 +687,7 @@ void scheduler_init(void) {
     boot_thread.extended_state = pmm_phys_to_virt(ext_phys);
     memset(boot_thread.extended_state, 0, 4096);
 
-    cpu->current_thread = &boot_thread;
+    sched_cpu_state()->current_thread = &boot_thread;
 }
 
 thread_t* scheduler_get_current(void) {
@@ -948,6 +999,10 @@ void scheduler_add(thread_t* thread) {
         return;
     }
 
+    if (thread->last_dispatch_tick == 0) {
+        thread->last_dispatch_tick = __atomic_load_n(&g_sched_global_tick, __ATOMIC_ACQUIRE);
+    }
+
     if (thread->remaining_thread_budget == 0 && thread->sched_class != SCHED_CLASS_SYSTEM) {
         target_cpu->budget_exhaustions++;
         target_env->budget_exhaustions++;
@@ -1050,6 +1105,10 @@ void scheduler_wake(thread_t* thread) {
             scheduler_set_state(thread, THREAD_SUSPENDED_MODE);
             spinlock_irqrestore(&target_cpu->runq_lock, flags);
             return;
+        }
+
+        if (thread->last_dispatch_tick == 0) {
+            thread->last_dispatch_tick = __atomic_load_n(&g_sched_global_tick, __ATOMIC_ACQUIRE);
         }
 
         if (thread->remaining_thread_budget == 0 && thread->sched_class != SCHED_CLASS_SYSTEM) {
@@ -1421,4 +1480,32 @@ bool scheduler_self_test_atomic_budget(void) {
     if (c2 != 1) return false;
     if (c3 != 0) return false;
     return __atomic_load_n(&proc.remaining_process_budget, __ATOMIC_ACQUIRE) == 0;
+}
+
+bool scheduler_self_test_starvation(void) {
+    scheduler_envelope_t env;
+    thread_t t;
+    thread_t* p;
+    uint64_t now = __atomic_load_n(&g_sched_global_tick, __ATOMIC_ACQUIRE);
+
+    memset(&env, 0, sizeof(env));
+    memset(&t, 0, sizeof(t));
+
+    t.tid = 301;
+    t.state = THREAD_READY;
+    t.sched_weight = 1;
+    t.sched_tokens = 0;
+    /* Simulate a very old thread that missed several pulses */
+    t.last_dispatch_tick = (now > SCHED_STALL_THRESHOLD + 10) ? (now - (SCHED_STALL_THRESHOLD + 10)) : 1;
+
+    ready_enqueue_locked(&env, &t);
+
+    p = scheduler_pick_next_weighted_locked(&env);
+    if (!p) return false;
+
+    /* Should have received emergency tokens (5 - 1 = 4 remaining) */
+    if (p->sched_tokens != 4) return false;
+    if (p->last_dispatch_tick != now) return false;
+
+    return true;
 }

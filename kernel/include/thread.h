@@ -66,6 +66,9 @@ typedef struct thread {
     uint64_t lease_validated_epoch;
     bool lease_valid_cache;
 
+    /* Starvation Monitoring */
+    uint64_t last_dispatch_tick;
+
     /* Extended State (SSE/FPU/XSAVE) */
     void* extended_state;      /* Pointer to a 64-byte aligned buffer (usually 1 frame) */
 } thread_t;

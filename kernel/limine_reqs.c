@@ -29,8 +29,21 @@ struct limine_hhdm_request hhdm_request = {
 };
 
 __attribute__((used, section(".requests")))
+struct limine_mp_request mp_request = {
+    .id = LIMINE_MP_REQUEST_ID,
+    .revision = 0,
+    .flags = 0
+};
+
+__attribute__((used, section(".requests")))
 struct limine_executable_address_request executable_address_request = {
     .id = LIMINE_EXECUTABLE_ADDRESS_REQUEST_ID,
+    .revision = 0
+};
+
+__attribute__((used, section(".requests")))
+struct limine_rsdp_request rsdp_request = {
+    .id = LIMINE_RSDP_REQUEST_ID,
     .revision = 0
 };
 

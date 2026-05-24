@@ -7,6 +7,7 @@
 #include "pmm.h"
 #include "scheduler.h"
 #include "kmalloc.h"
+#include "audit.h"
 
 extern void lattice_destroy(lattice_t* lattice);
 
@@ -186,6 +187,10 @@ cap_identity_t* cap_lookup(cnode_t* root, uint32_t cptr) {
     }
 
     if ((mode_get_current_mask() & ident->allowed_modes) == 0) {
+        audit_meta_t meta = {0};
+        meta.cap.cap_addr = (uint64_t)ident->object_ptr;
+        meta.cap.rights = ident->rights;
+        audit_strike(AUDIT_EVENT_CAP_DENIED, AUDIT_RESULT_DENIED, (uint64_t)ident->type << 32 | ident->badge, meta);
         cap_metric_inc(&cap_metrics.lookup_miss);
         return NULL;
     }
@@ -335,7 +340,7 @@ int cap_retype(cnode_t* root, uint32_t src_cptr, uint32_t dst_cptr, uint16_t new
         return -1;
     }
 
-    if (parent->type != CAP_TYPE_RAM || new_type != CAP_TYPE_PAGETABLE) {
+    if (parent->type != CAP_TYPE_RAM || (new_type != CAP_TYPE_PAGETABLE && new_type != CAP_TYPE_ENDPOINT)) {
         cap_metric_inc(&cap_metrics.retype_fail);
         return -1;
     }
@@ -343,6 +348,13 @@ int cap_retype(cnode_t* root, uint32_t src_cptr, uint32_t dst_cptr, uint16_t new
     if (!cap_slot_is_empty(root, dst_cptr)) {
         cap_metric_inc(&cap_metrics.retype_fail);
         return -1;
+    }
+
+    /* Initialize the object if it's an endpoint */
+    if (new_type == CAP_TYPE_ENDPOINT) {
+        ipc_endpoint_t* ep = (ipc_endpoint_t*)pmm_phys_to_virt(parent->object_ptr);
+        fast_zero(ep, sizeof(ipc_endpoint_t));
+        ep->lock = 0;
     }
 
     cap_identity_t* child = cap_identity_create(parent->object_ptr, new_type, parent->rights, badge, parent->allowed_modes);
@@ -379,6 +391,10 @@ int cap_mint(cnode_t* root, uint32_t src_cptr, uint32_t dst_cptr, uint16_t new_r
     }
 
     if ((new_rights & parent->rights) != new_rights) {
+        audit_meta_t meta = {0};
+        meta.cap.cap_addr = (uint64_t)parent->object_ptr;
+        meta.cap.rights = new_rights;
+        audit_strike(AUDIT_EVENT_CAP_DENIED, AUDIT_RESULT_DENIED, (uint64_t)parent->type << 32 | badge, meta);
         cap_metric_inc(&cap_metrics.policy_deny);
         cap_metric_inc(&cap_metrics.mint_fail);
         return -1;
@@ -418,6 +434,11 @@ int cap_mint(cnode_t* root, uint32_t src_cptr, uint32_t dst_cptr, uint16_t new_r
         cap_metric_inc(&cap_metrics.mint_fail);
         return -1;
     }
+
+    audit_meta_t success_meta = {0};
+    success_meta.cap.cap_addr = (uint64_t)child->object_ptr;
+    success_meta.cap.rights = child->rights;
+    audit_strike(AUDIT_EVENT_CAP_MINT, AUDIT_RESULT_OK, (uint64_t)child->type << 32 | badge, success_meta);
 
     cap_metric_inc(&cap_metrics.mint_ok);
     return 0;

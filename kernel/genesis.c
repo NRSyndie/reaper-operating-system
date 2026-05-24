@@ -12,6 +12,7 @@
 #include "include/console.h"
 #include "include/klog.h"
 #include "include/elf.h"
+#include "include/genesis.h"
 #include "include/entry_internal.h"
 
 extern struct limine_memmap_request memmap_request;
@@ -23,6 +24,8 @@ extern char kernel_end[];
 
 /* The Genesis Bridge: Virtual Address for Boot Info */
 #define BOOTINFO_VIRT_ADDR 0x1000
+#define PARADIGM_STACK_TOP  0x800000
+#define PARADIGM_STACK_PAGES 8
 
 /* 
  * We need a way to pass the Entry Point to the trampoline.
@@ -31,7 +34,176 @@ extern char kernel_end[];
 static uint64_t paradigm_entry_point = 0;
 
 static void paradigm_entry_stub(void) {
-    entry_pipeline_run(scheduler_get_current(), paradigm_entry_point, 0x800000);
+    entry_pipeline_run(scheduler_get_current(), paradigm_entry_point, PARADIGM_STACK_TOP);
+}
+
+bool genesis_bootinfo_init(boot_info_t* bootinfo, uint32_t genesis_cap_slot) {
+    if (!bootinfo) return false;
+
+    fast_zero(bootinfo, sizeof(*bootinfo));
+    bootinfo->magic = BOOTINFO_MAGIC;
+    bootinfo->version = 1;
+    bootinfo->hhdm_offset = hhdm_request.response ? hhdm_request.response->offset : 0;
+    bootinfo->genesis_cap_slot = genesis_cap_slot;
+
+    if (memmap_request.response && hhdm_request.response) {
+        bootinfo->memmap_addr = (uint64_t)memmap_request.response->entries - bootinfo->hhdm_offset;
+        bootinfo->memmap_entries = memmap_request.response->entry_count;
+    }
+
+    if (executable_address_request.response) {
+        uint64_t v_base = executable_address_request.response->virtual_base;
+        uint64_t p_base = executable_address_request.response->physical_base;
+
+        bootinfo->kernel_start = p_base + ((uint64_t)kernel_start - v_base);
+        bootinfo->kernel_end = p_base + ((uint64_t)kernel_end - v_base);
+    }
+
+    return true;
+}
+
+int genesis_inject_initial_caps(process_t* proc, const genesis_initial_caps_t* caps) {
+    cap_identity_t* ident;
+    uint64_t free_frame;
+
+    if (!proc || !proc->cspace || !caps) return -1;
+
+    ident = cap_identity_create(0, CAP_TYPE_GENESIS, 0xFFFF, 0xDEADBEEF, CAP_MODE_ALL);
+    if (!ident || cap_insert(proc->cspace, caps->genesis_cap_slot, ident) != 0) {
+        if (ident) cap_identity_free(ident);
+        return -1;
+    }
+
+    ident = cap_identity_create(proc->pml4_phys,
+                                CAP_TYPE_PAGETABLE,
+                                CAP_RIGHT_READ | CAP_RIGHT_WRITE | CAP_RIGHT_GRANT,
+                                0,
+                                CAP_MODE_ALL);
+    if (!ident || cap_insert(proc->cspace, caps->pagetable_slot, ident) != 0) {
+        if (ident) cap_identity_free(ident);
+        return -1;
+    }
+
+    free_frame = pmm_alloc(COLOR_CASUAL, proc->pid);
+    if (!free_frame) return -1;
+    ident = cap_identity_create(free_frame,
+                                CAP_TYPE_RAM,
+                                CAP_RIGHT_READ | CAP_RIGHT_WRITE | CAP_RIGHT_EXECUTE,
+                                0,
+                                CAP_MODE_ALL);
+    if (!ident || cap_insert(proc->cspace, caps->ram_slot, ident) != 0) {
+        if (ident) cap_identity_free(ident);
+        return -1;
+    }
+
+    ident = cap_identity_create(0, CAP_TYPE_AUDITOR, CAP_RIGHT_READ, 0, CAP_MODE_ALL);
+    if (!ident || cap_insert(proc->cspace, caps->audit_slot, ident) != 0) {
+        if (ident) cap_identity_free(ident);
+        return -1;
+    }
+
+    return 0;
+}
+
+int genesis_map_bootinfo(process_t* proc, uint64_t bootinfo_phys) {
+    if (!proc || !bootinfo_phys) return -1;
+    return vmm_map(proc, BOOTINFO_VIRT_ADDR, bootinfo_phys, PAGE_USER_DATA) ? 0 : -1;
+}
+
+int genesis_map_initial_stack(process_t* proc, uint64_t stack_top, uint64_t stack_pages) {
+    uint64_t i;
+
+    if (!proc || stack_top == 0 || stack_pages == 0) return -1;
+
+    for (i = 0; i < stack_pages; i++) {
+        uint64_t stack_phys = pmm_alloc(COLOR_CASUAL, proc->pid);
+        uint64_t stack_virt;
+
+        if (!stack_phys) return -1;
+        stack_virt = stack_top - ((i + 1) * PAGE_SIZE);
+        if (!vmm_map(proc, stack_virt, stack_phys, PAGE_USER_DATA)) {
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+int genesis_load_module_image(struct limine_file* module, process_t* proc, uint64_t* entry_point) {
+    if (!module || !proc || !entry_point) return -1;
+    return elf_load(module->address, proc, entry_point);
+}
+
+int genesis_spawn_process_from_module(struct limine_file* module,
+                                      mode_id_t mode,
+                                      uint64_t stack_top,
+                                      uint64_t stack_pages,
+                                      const genesis_initial_caps_t* caps,
+                                      bool mint_sched_auth,
+                                      bool queue_thread,
+                                      genesis_spawn_result_t* out_result) {
+    genesis_spawn_result_t result;
+    uint64_t new_pml4;
+    uint16_t pcid;
+    cnode_t* cspace;
+    process_t* proc;
+    uint64_t bootinfo_phys;
+    boot_info_t* bootinfo;
+    thread_t* thread;
+
+    if (!module || !caps || !out_result) return -1;
+    fast_zero(&result, sizeof(result));
+
+    new_pml4 = vmm_fork_pml4();
+    pcid = pcid_alloc(mode);
+    cspace = cnode_create();
+    proc = process_create(new_pml4, pcid, cspace, mode);
+    if (!proc) return -1;
+
+    if (genesis_inject_initial_caps(proc, caps) != 0) return -1;
+
+    bootinfo_phys = pmm_alloc(COLOR_SECURE, proc->pid);
+    if (!bootinfo_phys) return -1;
+    bootinfo = (boot_info_t*)pmm_phys_to_virt(bootinfo_phys);
+    if (!genesis_bootinfo_init(bootinfo, caps->genesis_cap_slot)) return -1;
+    if (genesis_map_bootinfo(proc, bootinfo_phys) != 0) return -1;
+    if (genesis_load_module_image(module, proc, &result.entry_point) != 0) return -1;
+    if (genesis_map_initial_stack(proc, stack_top, stack_pages) != 0) return -1;
+
+    thread = thread_create(proc, paradigm_entry_stub);
+    if (!thread) return -1;
+
+    if (mint_sched_auth) {
+        if (scheduler_mint_root_auth(proc,
+                                     caps->sched_root_slot,
+                                     mode,
+                                     (uint64_t)DEFAULT_QUANTUM * 32ULL,
+                                     (uint64_t)DEFAULT_QUANTUM,
+                                     (uint64_t)SCHED_DEFAULT_MAX_ACCUMULATED * 4ULL) != 0) {
+            return -1;
+        }
+
+        if (scheduler_derive_thread_auth(proc,
+                                         thread,
+                                         caps->sched_root_slot,
+                                         caps->sched_thread_slot,
+                                         DEFAULT_QUANTUM,
+                                         1,
+                                         SCHED_DEFAULT_MAX_ACCUMULATED) != 0) {
+            return -1;
+        }
+    }
+
+    if (queue_thread) {
+        scheduler_add(thread);
+    }
+
+    result.process = proc;
+    result.thread = thread;
+    result.bootinfo_phys = bootinfo_phys;
+    result.caps = *caps;
+    *out_result = result;
+    return 0;
 }
 
 void genesis_bridge_spawn(void) {
@@ -47,104 +219,35 @@ void genesis_bridge_spawn(void) {
     kprintf("[GENESIS] Module Found. Address: 0x%lx, Size: %ld\n", (uint64_t)module->address, module->size);
     kprintf("[TEST] Day 15 Genesis Module Contract: SUCCESS.\n");
 
-    /* 1. Create Paradigm's World */
-    uint64_t new_pml4 = vmm_fork_pml4();
-    uint16_t pcid = pcid_alloc(MODE_CASUAL);
-    cnode_t* cspace = cnode_create();
-    process_t* paradigm = process_create(new_pml4, pcid, cspace, MODE_CASUAL);
-    
-    if (!paradigm) {
-        kprintf("[DAY15-FAIL] paradigm process creation failed\n");
-        kpanic("GENESIS: Failed to create Paradigm process!");
+    {
+        genesis_initial_caps_t caps = {
+            .genesis_cap_slot = 1,
+            .pagetable_slot = 2,
+            .ram_slot = 3,
+            .audit_slot = 4,
+            .sched_root_slot = 5,
+            .sched_thread_slot = 6
+        };
+        genesis_spawn_result_t result;
+
+        if (genesis_spawn_process_from_module(module,
+                                              MODE_CASUAL,
+                                              PARADIGM_STACK_TOP,
+                                              PARADIGM_STACK_PAGES,
+                                              &caps,
+                                              true,
+                                              true,
+                                              &result) != 0) {
+            kprintf("[DAY15-FAIL] paradigm process creation failed\n");
+            kpanic("GENESIS: Failed to create Paradigm process!");
+        }
+
+        paradigm_entry_point = result.entry_point;
     }
 
-    /* 2. Inject the Genesis Capability */
-    cap_identity_t* genesis_ident = cap_identity_create(0, CAP_TYPE_GENESIS, 0xFFFF, 0xDEADBEEF, CAP_MODE_ALL);
-    cap_insert(cspace, 1, genesis_ident); /* Slot 1 is the Genesis Rune */
-
-    /* 2b. Inject PML4 and RAM Capabilities */
-    cap_identity_t* pml4_ident = cap_identity_create(paradigm->pml4_phys, CAP_TYPE_PAGETABLE, CAP_RIGHT_READ | CAP_RIGHT_WRITE | CAP_RIGHT_GRANT, 0, CAP_MODE_ALL);
-    cap_insert(cspace, 2, pml4_ident);
-
-    uint64_t free_frame = pmm_alloc(COLOR_CASUAL, paradigm->pid);
-    cap_identity_t* ram_ident = cap_identity_create(free_frame, CAP_TYPE_RAM, CAP_RIGHT_READ | CAP_RIGHT_WRITE | CAP_RIGHT_EXECUTE, 0, CAP_MODE_ALL);
-    cap_insert(cspace, 3, ram_ident);
-
-    /* 2d. Inject Auditor Capability (Fatal Forensics) */
-    cap_identity_t* audit_ident = cap_identity_create(0, CAP_TYPE_AUDITOR, CAP_RIGHT_READ, 0, CAP_MODE_ALL);
-    cap_insert(cspace, 4, audit_ident);
     kprintf("[TEST] Day 15 Genesis Capability Injection: SUCCESS.\n");
-
-    /* 3. Prepare Boot Information */
-    uint64_t bootinfo_phys = pmm_alloc(COLOR_SECURE, paradigm->pid);
-    boot_info_t* bootinfo = (boot_info_t*)pmm_phys_to_virt(bootinfo_phys);
-    fast_zero(bootinfo, sizeof(boot_info_t));
-
-    bootinfo->magic = BOOTINFO_MAGIC;
-    bootinfo->version = 1;
-    bootinfo->hhdm_offset = hhdm_request.response->offset;
-    bootinfo->genesis_cap_slot = 1;
-    
-    if (memmap_request.response) {
-        bootinfo->memmap_addr = (uint64_t)memmap_request.response->entries - bootinfo->hhdm_offset;
-        bootinfo->memmap_entries = memmap_request.response->entry_count;
-    }
-
-    if (executable_address_request.response) {
-        uint64_t v_base = executable_address_request.response->virtual_base;
-        uint64_t p_base = executable_address_request.response->physical_base;
-        
-        bootinfo->kernel_start = p_base + ((uint64_t)kernel_start - v_base);
-        bootinfo->kernel_end = p_base + ((uint64_t)kernel_end - v_base);
-    }
-
-    /* 4. Map Boot Info into Paradigm's Reality */
-    vmm_map(paradigm, BOOTINFO_VIRT_ADDR, bootinfo_phys, PAGE_USER_DATA);
     kprintf("[TEST] Day 15 Bootinfo Bridge: SUCCESS.\n");
-
-    /* 5. Load the ELF */
-    if (elf_load(module->address, paradigm, &paradigm_entry_point) != 0) {
-        kprintf("[DAY15-FAIL] paradigm elf load failed\n");
-        kpanic("GENESIS: ELF Load Failed!");
-    }
-    
     kprintf("[GENESIS] ELF Loaded. Entry Point: 0x%lx\n", paradigm_entry_point);
-
-    /* 6. Setup Stack */
-    // We allocate a single page for the stack at 0x800000 - 4096 (growing down)
-    // Wait, 0x800000 is top of stack?
-    // Let's allocate the page at 0x7FF000
-    uint64_t stack_phys = pmm_alloc(COLOR_CASUAL, paradigm->pid);
-    vmm_map(paradigm, 0x7FF000, stack_phys, PAGE_USER_DATA);
-    
-    /* 7. Launch Paradigm */
-    thread_t* paradigm_thread = thread_create(paradigm, paradigm_entry_stub);
-    if (!paradigm_thread) {
-        kprintf("[DAY15-FAIL] paradigm thread creation failed\n");
-        kpanic("GENESIS: Failed to create Paradigm thread.");
-    }
-
-    if (scheduler_mint_root_auth(paradigm,
-                                 5,
-                                 MODE_CASUAL,
-                                 (uint64_t)DEFAULT_QUANTUM * 32ULL,
-                                 (uint64_t)DEFAULT_QUANTUM,
-                                 (uint64_t)SCHED_DEFAULT_MAX_ACCUMULATED * 4ULL) != 0) {
-        kprintf("[DAY15-FAIL] root scheduling authority mint failed\n");
-        kpanic("GENESIS: Failed to mint root scheduling authority.");
-    }
-
-    if (scheduler_derive_thread_auth(paradigm,
-                                     paradigm_thread,
-                                     5,
-                                     6,
-                                     DEFAULT_QUANTUM,
-                                     1,
-                                     SCHED_DEFAULT_MAX_ACCUMULATED) != 0) {
-        kprintf("[DAY15-FAIL] thread scheduling authority derive failed\n");
-        kpanic("GENESIS: Failed to derive thread scheduling authority.");
-    }
-    scheduler_add(paradigm_thread);
 
     kprintf("[GENESIS] Paradigm soul forged and queued. C-Slot 1: GENESIS_CAP.\n");
 }

@@ -20,28 +20,27 @@ The Mode system must be initialized after memory management (PMM/VMM) but before
     *   **Rationale:** Validates the state machine logic (Legal/Illegal transitions) early in the boot process.
 
 ### B. Physical Memory Manager (`kernel/pmm.c`)
-We are preparing the PMM for "Day 6" enforcement. For now, we add architectural markers.
+Original Epoch-I planning marker retired. PMM integration is now implemented and tracked through ratified contracts and closure artifacts.
 
 *   **Touchpoint:** `pmm_alloc_page()`
-*   **Action:** Add comment/marker:
-    ```c
-    // [INTEGRATION-TODO] Mode Enforcement
-    // Check mode_get_current():
-    // - IF MODE_GHOST: Allocate from isolated GHOST_POOL.
-    // - IF MODE_LOCKDOWN: Return NULL (unless caller is KERNEL_CRITICAL).
-    ```
+*   **Current status:**
+    *   Allocation and scrub behavior is enforced by the PMM policy/temporal-scouring path.
+    *   Runtime verification is closure-gated through matrix and day-specific closure suites.
+    *   Authoritative behavior references:
+        *   `docs/components/memory/law9_temporal_scouring.md`
+        *   `docs/conformance_matrix.md`
 
 ### C. Virtual Memory Manager (`kernel/vmm.c`)
-Preparing VMM for strict isolation enforcement.
+Original Epoch-I planning marker retired. VMM-related isolation enforcement is now implemented through strict syscall validation, capability checks, and mode/PCID invariants.
 
 *   **Touchpoint:** `vmm_map_page()`
-*   **Action:** Add comment/marker:
-    ```c
-    // [INTEGRATION-TODO] Mode Enforcement
-    // Check mode_get_current():
-    // - IF MODE_LOCKDOWN: Return ERROR (Filesystem/Memory Map is Frozen).
-    // - IF MODE_SECURE: Enforce W^X (Write XOR Execute) strictly.
-    ```
+*   **Current status:**
+    *   User-facing map/unmap operations are strict-only and fail-closed.
+    *   Runtime conformance is verified by matrix/day closure gates with required/forbidden markers.
+    *   Authoritative behavior references:
+        *   `docs/components/syscalls/syscall_contracts.md`
+        *   `docs/components/syscalls/syscall_gate_testing_strategy.md`
+        *   `docs/conformance_matrix.md`
 
 ---
 

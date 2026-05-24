@@ -19,13 +19,16 @@
 #define VMM_GLOBAL   (1ULL << 8)
 
 /* SOFTWARE BITS (9-11 available) */
-#define PTE_DOORBELL (1ULL << 9)
+#define VMM_DEMAND   (1ULL << 9)
+#define VMM_COW      (1ULL << 10)
+#define PTE_DOORBELL (1ULL << 11)
 
 #define VMM_NX       (1ULL << 63)
 
 // Standard Page Permissions
 #define PAGE_USER_CODE (VMM_PRESENT | VMM_USER)
 #define PAGE_USER_DATA (VMM_PRESENT | VMM_WRITABLE | VMM_USER | VMM_NX)
+#define PAGE_USER_DATA_DEMAND (VMM_WRITABLE | VMM_USER | VMM_DEMAND)
 
 // Kernel Boundary
 #define KERNEL_VIRT_BASE 0xffffffff80000000
@@ -109,6 +112,8 @@ typedef struct {
 } vmm_statistics_t;
 
 extern vmm_statistics_t vmm_stats;
+
+bool vmm_handle_fault(uint64_t vaddr, uint64_t error_code);
 
 /**
  * @brief Initialize the Virtual Memory Manager.

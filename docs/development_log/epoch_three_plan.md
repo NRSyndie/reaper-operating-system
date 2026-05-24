@@ -86,10 +86,32 @@ Epoch III now runs as a final-product delivery program: preserve ABI/runtime sta
   - `docs/components/scheduler/scheduler_lock_order.md`
   - `docs/components/syscalls/syscall_contracts.md` (sched-auth gate ops + metrics)
 
-## 9) Current Status Checkpoint (2026-03-02)
+## 9) Current Status Checkpoint (2026-04-29)
 
 - Active slice: Epoch III closure ratification (Days 46/47/54/55 + Day 12 closure ratification + Day 13 closure ratification + Day 14 closure ratification + Day 15 closure ratification + Day 16 closure ratification + Day 17 closure ratification + Day 18 closure ratification + Day 19 closure ratification + Day 20 closure ratification + Day 21 closure ratification + Day 22 closure ratification + Day 23 closure ratification + Day 24 closure ratification + Day 25 closure ratification + Day 26 closure ratification + Day 27 closure ratification).
+- Active slice extension (2026-04-29): Day 83 audit hardening and Day 84 ACPI Layer 1/2 foundation are now in-tree and boot-validated.
+- Active slice extension (2026-04-29): Day 86 DMA authority contract and DMAR truth freeze are now in-tree and boot-validated.
+- Active slice extension (2026-05-13): Day 87 Paradigm stack baseline closure completed with three consecutive clean `make -C kernel verify_matrix` invocations after widening the initial userspace stack mapping in Genesis.
 - Completed in current slice:
+  - **Day 83 Audit Subsystem Hardening:**
+    - 128-byte aligned `audit_record_t` with 1024-slot atomic ring buffer.
+    - SMP-safe Acquire/Release head/tail management.
+    - BLAKE3-backed record chaining and seed derivation.
+    - `RDRAND`-first root seed generation with explicit weak `TSC` fallback.
+    - Lifecycle instrumentation: Threads, Capabilities (Mint/Denial), Scheduler Stall, and Phase Shifts.
+    - Overflow transparency with explicit `AUDIT_EVENT_OVERFLOW` and `gap_seq` tracking.
+  - **Day 84 ACPI Foundation:**
+    - Limine-backed RSDP discovery with RSDT/XSDT selection.
+    - Static MADT, FADT, HPET, MCFG, and DMAR parsing for later IOMMU/timer/PCIe work.
+    - Boot self-test marker: `[TEST] ACPI Layer 1+2: SUCCESS.`
+  - **Day 86 DMA Authority Contract:**
+    - Explicit IOMMU inventory and degraded-policy state model.
+    - ACPI-owned DMAR export as the canonical firmware truth surface.
+    - Boot self-test markers for inventory and degraded-policy contracts.
+  - **Day 87 Paradigm Stack Baseline Closure:**
+    - Confirmed the early Paradigm bootstrap user fault in `kernel/serial.log` at `0x7ffdd0` below the fixed entry stack top `0x800000`.
+    - Expanded the Genesis-mapped Paradigm user stack from 1 page to 8 pages while preserving the fixed entry RSP.
+    - Revalidated the full runtime matrix in three consecutive clean invocations before daemon work resumed.
   - kernel transition envelope pipeline with compile/verify/apply/attest marker evidence
   - Paradigm accepted/rejected transition probes through `GATE_OP_MODE_TRANSITION`
   - root/thread scheduling authority capability model
@@ -166,6 +188,31 @@ Epoch III now runs as a final-product delivery program: preserve ABI/runtime sta
     - added deterministic Day 27 markers for syscall boundary hardening and strict foundation probes.
     - added explicit forbidden `[DAY27-FAIL]` path and repeat-run Day 27 closure suite.
     - elevated Day 27 boundary/strict evidence from generic logs to closure-gated runtime contracts.
+  - **Day 72 Law 2 Closure Hardening:**
+    - added kernel-owned `GATE_OP_LAW2_ATTEST` evidence path and Fate attestation records.
+    - finalized strict-only map/unmap control-word enforcement and removed legacy strict-wrapper ambiguity.
+  - **Day 73 Day 29 Enhancement Ratification:**
+    - added Day 29 reason-coverage mask and strict-unmap performance budget evidence.
+    - expanded Day 29 reject-class probes and upgraded matrix/day29 suite gates.
+  - **Day 74 Day 30 Enhancement Ratification:**
+    - added Day 30 reason-coverage mask and reject-scan performance budget evidence.
+    - expanded Day 30 reject probes and upgraded matrix/day30 suite gates.
+  - **Day 75 Day 31 Enhancement Ratification:**
+    - converted Day 31 from one-off rerun to deterministic double-attestation closure contract.
+    - added Day 31 status/reason parity and bounded drift gates with explicit `[DAY31-FAIL]` path.
+    - added repeat-run Day 31 closure suite and matrix required/forbidden marker enforcement.
+  - **Day 76 Day 32 Enhancement Ratification:**
+    - converted Day 32 fault-to-string verification into deterministic closure markers and fail markers.
+    - added explicit read-mode filter isolation checks across transition/fault/lattice/attest views.
+    - added bounded fault-read runtime budget gate and repeat-run Day 32 closure suite.
+  - **Day 77 Day 33 Enhancement Ratification:**
+    - converted Day 33 full-context capture validation into deterministic closure markers and fail markers.
+    - added sampled full-context integrity and fault-vector/type sanity checks for fault audit windows.
+    - added bounded full-context audit runtime budget gate and repeat-run Day 33 closure suite.
+  - **Day 78 Day 34 Enhancement Ratification:**
+    - converted Day 34 real-path validation into deterministic closure markers and fail markers.
+    - added real-path #PF evidence and user-fault provenance checks for lattice first-touch audit windows.
+    - added bounded real-fault audit runtime budget gate and repeat-run Day 34 closure suite.
 - Product boundary:
   - BSP-only ESAK profile is explicitly ratified for this closure (`[TEST] ESAK IPI profile: BSP_ONLY`).
   - Day 12 closure now requires deterministic matrix markers for fault isolation, rendezvous contract, reaper lifecycle, and process annihilation.
@@ -184,3 +231,7 @@ Epoch III now runs as a final-product delivery program: preserve ABI/runtime sta
   - Day 25 closure now requires deterministic PCID colorization/scrub/secure-context markers and absence of Day 25 failure markers.
   - Day 26 closure now requires deterministic Law 6 substrate/Void Wall/attunement markers and absence of Day 26 failure markers.
   - Day 27 closure now requires deterministic boundary/strict foundation markers and absence of Day 27 failure markers.
+  - Day 31 closure now requires deterministic revalidation security/determinism/performance markers and absence of Day 31 failure markers.
+  - Day 32 closure now requires deterministic fault-filter/metadata/performance markers and absence of Day 32 failure markers.
+  - Day 33 closure now requires deterministic full-context/vector/performance markers and absence of Day 33 failure markers.
+  - Day 34 closure now requires deterministic real-path/provenance/performance markers and absence of Day 34 failure markers.

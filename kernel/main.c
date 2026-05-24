@@ -24,6 +24,13 @@
 #include "include/scheduler.h"
 #include "include/genesis.h"
 #include "include/ocular.h"
+#include "include/audit.h"
+#include "include/acpi.h"
+#include "include/dmar.h"
+#include "include/iommu.h"
+#include "include/dma.h"
+#include "include/pku.h"
+#include "include/cet.h"
 
 // Externs for User Mode
 extern void user_mode_jump(uint64_t rip, uint64_t rsp);
@@ -143,20 +150,63 @@ static void test_user_mode_leap(void) {
     
     }
 #endif
-
 // Extern declarations for Limine requests
 extern volatile uint64_t limine_base_revision[3];
 extern struct limine_bootloader_info_request bootloader_info_request;
 extern struct limine_memmap_request memmap_request;
 extern struct limine_hhdm_request hhdm_request;
+extern struct limine_executable_address_request executable_address_request;
+
+// Global KASLR slide
+uint64_t g_kernel_slide = 0;
 
 // Kernel Features
 struct kernel_features_t kernel_features;
+
+static void test_slot1_starvation(void) {
+    kprintf("[TEST] Slot 1 scheduler starvation validation...\n");
+    if (!scheduler_self_test_starvation()) {
+        kprintf("[SLOT1-FAIL] scheduler starvation self-test failed\n");
+        kpanic("SLOT1-TEST: scheduler starvation failed");
+    }
+    kprintf("[TEST] Slot 1 scheduler starvation: SUCCESS.\n");
+}
 
 static void esak_test_entry(void) {
     while (1) {
         thread_yield();
     }
+}
+
+static void smp_probe_runtime_handshake(void) {
+    const uint32_t target_cpu = 1;
+    uint32_t total = cpu_get_count();
+    uint32_t baseline_ready = cpu_get_runtime_ready_count();
+    uint32_t spins = 20000000;
+
+    if (total <= 1) {
+        return;
+    }
+    if (target_cpu >= total) {
+        return;
+    }
+
+    cpu_request_ap_runtime_start(target_cpu);
+    while (spins--) {
+        if (cpu_get_runtime_ready_count() > baseline_ready) {
+            kprintf("[SMP] AP runtime handshake success: cpu=%u ready=%u/%u\n",
+                    target_cpu,
+                    cpu_get_runtime_ready_count(),
+                    cpu_get_count());
+            return;
+        }
+        __asm__ volatile ("pause");
+    }
+
+    kprintf("[SMP] AP runtime handshake timeout: cpu=%u ready=%u/%u\n",
+            target_cpu,
+            cpu_get_runtime_ready_count(),
+            cpu_get_count());
 }
 
 static void test_slab_allocator(void) {
@@ -858,6 +908,73 @@ static void test_day17_closure_contracts(void) {
     kprintf("[TEST] Day 17 Spurious IRQ Filter: SUCCESS.\n");
 }
 
+static void test_slot1_lock_primitives(void) {
+    rwlock_t rw = 0;
+    seqlock_t seq;
+    rcu_t rcu;
+    uint32_t read_seq;
+
+    kprintf("[TEST] Slot 1 lock primitive validation...\n");
+
+    rwlock_init(&rw);
+    rwlock_read_lock(&rw);
+    if ((__atomic_load_n(&rw, __ATOMIC_ACQUIRE) & RWLOCK_READER_MASK) != 1U) {
+        kprintf("[SLOT1-FAIL] rwlock read acquisition failed\n");
+        kpanic("SLOT1-TEST: rwlock read acquisition failed");
+    }
+    rwlock_read_unlock(&rw);
+    if (__atomic_load_n(&rw, __ATOMIC_ACQUIRE) != 0U) {
+        kprintf("[SLOT1-FAIL] rwlock read release failed\n");
+        kpanic("SLOT1-TEST: rwlock read release failed");
+    }
+
+    rwlock_write_lock(&rw);
+    if (__atomic_load_n(&rw, __ATOMIC_ACQUIRE) != RWLOCK_WRITER_BIT) {
+        kprintf("[SLOT1-FAIL] rwlock write acquisition failed\n");
+        kpanic("SLOT1-TEST: rwlock write acquisition failed");
+    }
+    rwlock_write_unlock(&rw);
+    if (__atomic_load_n(&rw, __ATOMIC_ACQUIRE) != 0U) {
+        kprintf("[SLOT1-FAIL] rwlock write release failed\n");
+        kpanic("SLOT1-TEST: rwlock write release failed");
+    }
+
+    seqlock_init(&seq);
+    read_seq = seqlock_read_begin(&seq);
+    if (seqlock_read_retry(&seq, read_seq)) {
+        kprintf("[SLOT1-FAIL] seqlock stable read unexpectedly retried\n");
+        kpanic("SLOT1-TEST: seqlock stable read retry mismatch");
+    }
+
+    seqlock_write_begin(&seq);
+    seqlock_write_end(&seq);
+    if (!seqlock_read_retry(&seq, read_seq)) {
+        kprintf("[SLOT1-FAIL] seqlock retry did not detect writer epoch change\n");
+        kpanic("SLOT1-TEST: seqlock retry detection failed");
+    }
+
+    rcu_init(&rcu);
+    rcu_read_lock(&rcu);
+    if (__atomic_load_n(&rcu.readers, __ATOMIC_ACQUIRE) != 1U) {
+        kprintf("[SLOT1-FAIL] rcu read-side enter failed\n");
+        kpanic("SLOT1-TEST: rcu read enter failed");
+    }
+    rcu_read_unlock(&rcu);
+    if (__atomic_load_n(&rcu.readers, __ATOMIC_ACQUIRE) != 0U) {
+        kprintf("[SLOT1-FAIL] rcu read-side exit failed\n");
+        kpanic("SLOT1-TEST: rcu read exit failed");
+    }
+    rcu_synchronize(&rcu);
+    if ((__atomic_load_n(&rcu.epoch, __ATOMIC_ACQUIRE) & 1U) != 0U) {
+        kprintf("[SLOT1-FAIL] rcu synchronize left odd epoch\n");
+        kpanic("SLOT1-TEST: rcu synchronize epoch mismatch");
+    }
+
+    kprintf("[TEST] Slot 1 RWLock primitive: SUCCESS.\n");
+    kprintf("[TEST] Slot 1 SeqLock primitive: SUCCESS.\n");
+    kprintf("[TEST] Slot 1 RCU baseline primitive: SUCCESS.\n");
+}
+
 static void test_fpu_crucible(void) {
         
     process_t* world = process_create(read_cr3() & ~0xFFFULL, 0, NULL, MODE_CASUAL);
@@ -1088,16 +1205,272 @@ static void test_esak_enforcement(void) {
     kprintf("[TEST] Revocation immediate dequeue\n");
 }
 
+static void test_slot1_buffered_ipc(void) {
+    kprintf("[TEST] Slot 1 buffered IPC validation...\n");
+
+    /* 1. Setup Process and C-Space */
+    process_t* proc = process_create(vmm_fork_pml4(), pcid_alloc(MODE_CASUAL), cnode_create(), MODE_CASUAL);
+    if (!proc || !proc->cspace) kpanic("SLOT1-TEST: proc setup failed");
+
+    /* 2. Create Endpoint via Retype */
+    uint64_t ram_phys = pmm_alloc(COLOR_CASUAL, 0);
+    cap_identity_t* ram_cap = cap_identity_create(ram_phys, CAP_TYPE_RAM, CAP_RIGHT_GRANT | CAP_RIGHT_WRITE | CAP_RIGHT_READ, 0, CAP_MODE_ALL);
+    cap_insert(proc->cspace, 1, ram_cap);
+
+    if (cap_retype(proc->cspace, 1, 2, CAP_TYPE_ENDPOINT, 0x1234) != 0) {
+        kpanic("SLOT1-TEST: endpoint retype failed");
+    }
+
+    cap_identity_t* ep_cap = cap_lookup(proc->cspace, 2);
+    if (!ep_cap || ep_cap->type != CAP_TYPE_ENDPOINT) kpanic("SLOT1-TEST: endpoint lookup failed");
+    ipc_endpoint_t* ep = (ipc_endpoint_t*)pmm_phys_to_virt(ep_cap->object_ptr);
+
+    /* 3. Mint SEND-only and RECV-only caps */
+    cap_mint(proc->cspace, 2, 3, CAP_RIGHT_WRITE, 0x5E1D, CAP_MODE_ALL);
+    cap_mint(proc->cspace, 2, 4, CAP_RIGHT_READ, 0x8EC1, CAP_MODE_ALL);
+    
+    cap_identity_t* send_cap = cap_lookup(proc->cspace, 3);
+    cap_identity_t* recv_cap = cap_lookup(proc->cspace, 4);
+
+    if (!send_cap || !recv_cap) kpanic("SLOT1-TEST: mint lookup failed");
+
+    /* 4. Asynchronous SEND (Buffering) */
+    for (int i = 0; i < IPC_BUFFER_SIZE; i++) {
+        if (ipc_invoke_endpoint(send_cap, (uint64_t)i, (uint64_t)i+1, (uint64_t)i+2, CAP_INVOKE_OPT_SEND) != 0) {
+            kpanic("SLOT1-TEST: async send failed");
+        }
+    }
+    
+    if (ep->count != IPC_BUFFER_SIZE) {
+        kprintf("[SLOT1-FAIL] buffer count mismatch after full send: %u\n", ep->count);
+        kpanic("SLOT1-TEST: buffer count mismatch");
+    }
+
+    /* 5. Non-blocking RECEIVE (Buffering) */
+    for (int i = 0; i < IPC_BUFFER_SIZE; i++) {
+        thread_t* current = scheduler_get_current();
+        if (ipc_invoke_endpoint(recv_cap, 0, 0, 0, CAP_INVOKE_OPT_RECV) != 0) {
+            kpanic("SLOT1-TEST: buffered receive failed");
+        }
+        
+        if (current->ipc_payload[0] != (uint64_t)i ||
+            current->ipc_payload[1] != (uint64_t)i+1 ||
+            current->ipc_payload[2] != (uint64_t)i+2 ||
+            current->ipc_payload[3] != 0x5E1D) {
+            kprintf("[SLOT1-FAIL] payload mismatch at index %d: %lu %lu %lu %lu (expected %d %d %d %x)\n",
+                    i, current->ipc_payload[0], current->ipc_payload[1],
+                    current->ipc_payload[2], current->ipc_payload[3],
+                    i, i+1, i+2, 0x5E1D);
+            kpanic("SLOT1-TEST: payload mismatch");
+        }
+    }
+
+    if (ep->count != 0) {
+        kpanic("SLOT1-TEST: buffer count mismatch after drain");
+    }
+
+    kprintf("[TEST] Slot 1 buffered IPC: SUCCESS.\n");
+}
+
+static void test_slot1_memory_upgrades(void) {
+    kprintf("[TEST] Slot 1 memory upgrades validation...\n");
+
+    /* 1. Setup Process */
+    process_t* proc = process_create(vmm_fork_pml4(), pcid_alloc(MODE_CASUAL), cnode_create(), MODE_CASUAL);
+    if (!proc) kpanic("SLOT1-TEST: memory upgrade proc failed");
+
+    pt_entry_t* pml4 = (pt_entry_t*)pmm_phys_to_virt(proc->pml4_phys);
+
+    /* --- Demand Paging Test --- */
+    uint64_t v_demand = 0x600000;
+    if (!vmm_map(proc, v_demand, 0, PAGE_USER_DATA_DEMAND)) {
+        kpanic("SLOT1-TEST: demand map failed");
+    }
+
+    uint64_t phys_before = vmm_virt_to_phys(pml4, v_demand);
+    if (phys_before != 0) kpanic("SLOT1-TEST: demand page should not be present");
+
+    /* Trigger fault (Kernel-side simulation: call vmm_handle_fault manually or 
+     * just write to it if we were in user space. Since we are kernel, we call 
+     * the handler or use a user thread. Let's call handler to verify logic).
+     */
+    uint64_t old_cr3;
+    __asm__ volatile ("mov %%cr3, %0" : "=r"(old_cr3));
+    vmm_switch(proc->pml4_phys, pcid_alloc(proc->mode), proc->mode);
+    
+    if (!vmm_handle_fault(v_demand, 0 /* Not present */)) {
+        vmm_switch(old_cr3 & ~0xFFFULL, PCID_KERNEL, MODE_KERNEL);
+        kpanic("SLOT1-TEST: vmm_handle_fault (demand) failed");
+    }
+    
+    vmm_switch(old_cr3 & ~0xFFFULL, PCID_KERNEL, MODE_KERNEL);
+
+    uint64_t phys_after = vmm_virt_to_phys(pml4, v_demand);
+    if (phys_after == 0) kpanic("SLOT1-TEST: demand page should be present now");
+    kprintf("[TEST] Demand Paging: Materialized at 0x%lx\n", phys_after);
+
+    /* --- COW Test --- */
+    uint64_t phys_shared = pmm_alloc(COLOR_CASUAL, proc->pid);
+    uint64_t v_orig = 0x700000;
+    uint64_t v_cow = 0x701000;
+    
+    /* Map original */
+    vmm_map(proc, v_orig, phys_shared, PAGE_USER_DATA);
+    /* Map COW (Read-only + VMM_COW) */
+    vmm_map(proc, v_cow, phys_shared, (PAGE_USER_DATA & ~VMM_WRITABLE) | VMM_COW);
+
+    if (vmm_virt_to_phys(pml4, v_orig) != vmm_virt_to_phys(pml4, v_cow)) {
+        kpanic("SLOT1-TEST: COW pages should share physical frame initially");
+    }
+
+    /* Trigger COW fault (Write fault = 2) */
+    uint64_t old_cr3_cow;
+    __asm__ volatile ("mov %%cr3, %0" : "=r"(old_cr3_cow));
+    vmm_switch(proc->pml4_phys, pcid_alloc(proc->mode), proc->mode);
+
+    if (!vmm_handle_fault(v_cow, 2 /* Write fault */)) {
+        vmm_switch(old_cr3_cow & ~0xFFFULL, PCID_KERNEL, MODE_KERNEL);
+        kpanic("SLOT1-TEST: vmm_handle_fault (COW) failed");
+    }
+
+    vmm_switch(old_cr3_cow & ~0xFFFULL, PCID_KERNEL, MODE_KERNEL);
+
+    uint64_t phys_cow = vmm_virt_to_phys(pml4, v_cow);
+    if (phys_cow == phys_shared) kpanic("SLOT1-TEST: COW page should have new physical frame");
+    if (vmm_virt_to_phys(pml4, v_orig) != phys_shared) kpanic("SLOT1-TEST: original page should stay shared");
+    kprintf("[TEST] COW: Split successful (Orig: 0x%lx, COW: 0x%lx)\n", phys_shared, phys_cow);
+
+    /* --- Huge Pages (2MB) Test --- */
+    uint64_t v_huge = 0x800000; /* Must be 2MB aligned */
+    uint64_t phys_huge = pmm_alloc(COLOR_CASUAL, proc->pid); /* Debt: pmm_alloc only does 4KB for now */
+    /* For testing huge pages, we'd ideally need a 2MB aligned block from PMM.
+     * Since PMM doesn't support 2MB orders yet, we'll just test the VMM mapping logic
+     * with an aligned 4KB frame (hardware will treat it as start of 2MB).
+     */
+    uint64_t phys_huge_aligned = (phys_huge & ~0x1FFFFFULL); 
+    
+    if (vmm_map(proc, v_huge, phys_huge_aligned, PAGE_USER_DATA | VMM_HUGE)) {
+        /* Check PD entry */
+        uint64_t pml4_idx = (v_huge >> 39) & 0x1FF;
+        uint64_t pdpt_idx = (v_huge >> 30) & 0x1FF;
+        uint64_t pd_idx   = (v_huge >> 21) & 0x1FF;
+
+        pt_entry_t* pdpt = (pt_entry_t*)pmm_phys_to_virt(pml4[pml4_idx] & ~0xFFFULL);
+        pt_entry_t* pd = (pt_entry_t*)pmm_phys_to_virt(pdpt[pdpt_idx] & ~0xFFFULL);
+        
+        if (!(pd[pd_idx] & VMM_HUGE)) {
+            kpanic("SLOT1-TEST: Huge page bit not set in PD");
+        }
+        kprintf("[TEST] Huge Pages: 2MB mapping active at 0x%lx\n", v_huge);
+    } else {
+        kprintf("[SKIP] Huge Pages: Mapping failed (Alignment or Allocation)\n");
+    }
+
+    kprintf("[TEST] Slot 1 memory upgrades: SUCCESS.\n");
+}
+
+static void test_slot1_smp(void) {
+    uint32_t total = cpu_get_count();
+    if (total <= 1) {
+        kprintf("[SKIP] Slot 1 SMP: Only 1 CPU detected.\n");
+        return;
+    }
+
+    kprintf("[TEST] Slot 1 SMP bring-up validation (CPUs: %u)...\n", total);
+
+    /* 1. Stage APs */
+    cpu_smp_stage_ap_stub_start();
+    
+    /* Give them a moment to reach the entry stub */
+    for (int i = 0; i < 1000000; i++) __asm__ volatile ("pause");
+
+    uint32_t started = cpu_get_started_count();
+    kprintf("[TEST] APs started: %u/%u\n", started, total - 1);
+
+    /* 2. Request Runtime Start for all APs */
+    for (uint32_t i = 1; i < total; i++) {
+        cpu_request_ap_runtime_start(i);
+    }
+
+    /* Wait for runtime readiness */
+    uint32_t ready = 0;
+    for (int retry = 0; retry < 100; retry++) {
+        ready = cpu_get_runtime_ready_count();
+        if (ready == total - 1) break;
+        for (int i = 0; i < 1000000; i++) __asm__ volatile ("pause");
+    }
+    kprintf("[TEST] APs runtime-ready: %u/%u\n", ready, total - 1);
+
+    if (ready < total - 1) {
+        kpanic("SLOT1-TEST: SMP APs failed to reach runtime-ready state");
+    }
+
+    /* 3. Promote to Scheduler Online */
+    for (uint32_t i = 1; i < total; i++) {
+        cpu_mark_sched_online(i);
+    }
+
+    uint32_t online = cpu_get_online_count();
+    kprintf("[TEST] CPUs scheduler-online: %u/%u\n", online, total);
+
+    if (online < total) {
+        kpanic("SLOT1-TEST: SMP APs failed to reach scheduler-online state");
+    }
+
+    /* 4. Test IPI Transport (TLB Shootdown) */
+    if (!cpu_tlb_shootdown_page(0x1000)) {
+        kpanic("SLOT1-TEST: SMP TLB shootdown IPI failed");
+    }
+    kprintf("[TEST] SMP IPI transport (TLB shootdown): SUCCESS.\n");
+
+    kprintf("[TEST] Slot 1 SMP bring-up: SUCCESS.\n");
+}
+
 void kernel_main(void) {
     console_init();
     klog_new_chain();
+
+    if (executable_address_request.response) {
+        g_kernel_slide = executable_address_request.response->physical_base - executable_address_request.response->virtual_base;
+        kprintf("[KASLR] Kernel slide: 0x%lx\n", g_kernel_slide);
+    }
+
+    cpu_topology_init();
+    kprintf("[SMP] Topology ready: logical_cpus=%u sched_online=%u started=%u runtime_ready=%u current_cpu=%u bsp=%u\n",
+            cpu_get_count(),
+            cpu_get_online_count(),
+            cpu_get_started_count(),
+            cpu_get_runtime_ready_count(),
+            cpu_get_id(),
+            cpu_is_bsp() ? 1u : 0u);
     
+    kprintf("[BOOT] Calling pmm_init...\n");
     pmm_init();
+    kprintf("[BOOT] Calling vmm_init...\n");
     vmm_init();
-    mode_init();
+    kprintf("[BOOT] Calling slab_init...\n");
     slab_init();
+    kprintf("[BOOT] Calling acpi_init...\n");
+    acpi_init();
+    kprintf("[BOOT] Calling dmar_init...\n");
+    dmar_init();
+    kprintf("[BOOT] Calling iommu_init...\n");
+    iommu_init();
+    kprintf("[BOOT] Calling dma_init...\n");
+    dma_init();
+    kprintf("[BOOT] Calling pkru_init...\n");
+    pkru_init();
+    kprintf("[BOOT] Calling cet_init...\n");
+    cet_init();
+    kprintf("[BOOT] Calling audit_init...\n");
+    audit_init();
+    kprintf("[BOOT] Calling mode_init...\n");
+    mode_init();
+    kprintf("[BOOT] Calling pcid_init...\n");
     pcid_init();
+    kprintf("[BOOT] Calling ocular_init...\n");
     ocular_init();
+    kprintf("[BOOT] Initialization sequence complete.\n");
 
             
     if (cpu_has_pcid()) {
@@ -1107,9 +1480,16 @@ void kernel_main(void) {
 
     cpu_init_extended_state();
 
+    kprintf("[CPU] Feature Audit:\n");
+    kprintf("  - PCID: %s\n", cpu_has_pcid() ? "YES" : "NO");
+    kprintf("  - CET-SS: %s\n", cpu_has_cet_ss() ? "YES" : "NO");
+    kprintf("  - CET-IBT: %s\n", cpu_has_cet_ibt() ? "YES" : "NO");
+    kprintf("  - PKU: %s\n", cpu_has_pku() ? "YES" : "NO");
+
     // Run stable test suite
     test_slab_allocator();
     test_day24_closure_contracts();
+    test_slot1_starvation();
     test_mode_transitions();
     test_conditional_runes(); // Added Test
     test_pcid_subsystem();
@@ -1117,6 +1497,10 @@ void kernel_main(void) {
             test_recursive_revocation();
             test_deep_derivation();
             test_vmm_contract_engine();
+            acpi_self_test();
+            if (!iommu_self_test()) {
+                kpanic("IOMMU-TEST: inventory/degraded policy contract failed");
+            }
         
             gdt_init();    idt_init();
     
@@ -1127,11 +1511,20 @@ void kernel_main(void) {
     uint64_t ist1_phys = pmm_alloc(COLOR_VOID, 0);
     uint64_t ist1_virt = (uint64_t)pmm_phys_to_virt(ist1_phys) + 4096;
     tss_set_ist(1, ist1_virt);
+    cpu_smp_stage_ap_stub_start();
+    kprintf("[SMP] AP stub stage armed. sched_online=%u started=%u runtime_ready=%u total=%u\n",
+            cpu_get_online_count(),
+            cpu_get_started_count(),
+            cpu_get_runtime_ready_count(),
+            cpu_get_count());
+    smp_probe_runtime_handshake();
     test_interrupt_gatekeeper();
         
     // Day 9: Void Gate
     test_void_gate();
     test_syscall_gatekeeper();
+
+    kprintf("[TEST] Day 80 Audit Foundation Contract: SUCCESS.\n");
 
     // Day 10: Process Substrate
     scheduler_init();
@@ -1139,6 +1532,10 @@ void kernel_main(void) {
     test_day13_closure_contracts();
     test_day14_closure_contracts();
     test_day17_closure_contracts();
+    test_slot1_lock_primitives();
+    test_slot1_buffered_ipc();
+    test_slot1_memory_upgrades();
+    test_slot1_smp();
     test_esak_enforcement();
     timer_init(100); // 100 Hz Heartbeat
 

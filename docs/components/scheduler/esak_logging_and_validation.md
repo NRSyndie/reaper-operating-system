@@ -113,6 +113,22 @@ Final cleanup:
 - remove ambient enqueue logic
 - freeze ESAK model as final
 
+## 7. Audit Integration (Fate Strings)
+
+As of Day 80, the scheduler is integrated with the Layer 3 Audit Pipeline (Fate Strings). Critical scheduler events are committed to the immutable ledger to ensure forensic traceability.
+
+### 7.1 Scheduler Audit Events
+
+| Event | Trigger | Metadata |
+| :--- | :--- | :--- |
+| `AUDIT_EVENT_SCHED_STALL` | `next->last_dispatch_tick` exceeds threshold | TID, Stall Ticks, Reality ID |
+| `AUDIT_EVENT_PHASE_SHIFT` | Reality transition (Phase Shift) | Source ID, Auth Flags, Target Mode |
+| `AUDIT_EVENT_THREAD_CREATE` | `thread_create` success | TID, Auth Mode |
+| `AUDIT_EVENT_THREAD_DESTROY`| `thread_destroy` initiation | TID |
+
+### 7.2 Safety Policy
+Audit strikes for scheduler events (especially Stalls and Shifts) MUST occur **before** any console logging or state change that could hang the system. This ensures the forensic record is committed even if the system fails to recover.
+
 ## 1. Logging Principles
 
 - Emit structured `klog` markers with stable key/value fields.

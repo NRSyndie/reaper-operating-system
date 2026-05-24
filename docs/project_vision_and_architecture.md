@@ -47,7 +47,7 @@ The Voidborn kernel provides ONLY the following mechanisms:
 *   Hardware Mapping (map device-MMIO regions)
 
 **Boot Philosophy: Creation From Nothing**
-On boot, the microkernel initializes its own instruction environment and exposes a single **Genesis Capability (GENESIS_CAP)**. This is the ONLY "something" the kernel creates. The GENESIS_CAP allows for the creation of the first address space, threads, privileged capabilities, and system daemons, enabling user-space to construct the OS itself. Paradigm is thus the "first god," using GENESIS_CAP to construct reality.
+On boot, the microkernel initializes its own instruction environment and exposes a single **Genesis Capability (GENESIS_CAP)**. This is the ONLY "something" the kernel creates. The GENESIS_CAP allows for the creation of the first address space, threads, privileged capabilities, and system daemons, enabling user-space to construct the OS itself. **Genesis** is the first privileged userspace actor: it bootstraps the environment, hands off bounded authority to the long-lived system daemons, destroys `GENESIS_CAP`, and exits. **Paradigm** is then the ongoing sovereign for Reality and Security policy, not the bootstrapper itself.
 
 **Security Properties:**
 *   **Zero-Residue Execution:** Memory is zeroed, processes leave no trace, subsystems can be annihilated.
@@ -88,7 +88,14 @@ The OS hosts multiple realities, each a self-contained virtual universe with its
 
 
 ### 4.4. Layer 3 — Fate Strings: Timelines Etched in Eternity
-Fate Strings encode the unbreakable, immutable histories of the system. Each event (mode transitions, capability delegations, security escalations, cross-reality movements) is a thread cryptographically bound to the last, forming a lineage chain. Fate String Records (FSRs) are append-only, ensuring perfect auditability, reversibility, and traceability. The "Chronicler" maintains this Merkle-linked tapestry, ensuring tamper-proof and reconstructible system history.
+Fate Strings encode the unbreakable, immutable histories of the system. Each event (mode transitions, capability delegations, security escalations, scheduler stalls) is a thread cryptographically bound to the last, forming a lineage chain.
+
+**Technical Architecture:**
+- **Atomic Records**: 128-byte aligned records containing temporal context, actor/target IDs, event types, and forensic metadata.
+- **The Lattice**: A 1024-slot SMP-safe ring buffer with Acquire/Release semantics, ensuring high-throughput auditing without data races.
+- **Cryptographic Chaining**: A rolling hash chain binds every record. The chain is re-keyed on every Phase Shift using a **Reality-Bound Seed**, ensuring that compromising one Reality's history does not expose the next.
+- **Gap Transparency**: If the system is flooded, it prioritizes integrity over completeness by striking an explicit `OVERFLOW` record and tracking lost events via `gap_seq` in subsequent entries.
+- **Fatal Forensics**: Records are append-only and immutable, providing authorized user-space auditors with a tamper-proof and reconstructible system history. Within Paradigm, the semi-independent **Sentinel** audit subsystem preserves this watchdog role without requiring a separate top-level daemon.
 
 ### 4.5. Layer 4 — Occult Contracts: The Laws That Bind
 This layer transforms high-risk operations into cryptographically enforced contracts. Every action requires a contract specifying what is granted, what must be paid (cost), who can invoke it, and which "plane" (layer) it applies to. Contracts are binding, unalterable, and unbypassable once sealed. Knowledge of the "ritual" (cost clause) is necessary for invocation.
@@ -98,27 +105,29 @@ This layer transforms high-risk operations into cryptographically enforced contr
 Reaper-OS is broadly divided into structured layers, isolated by capability boundaries, IPC interfaces, namespace isolation, and kernel-managed address spaces:
 
 *   **Userspace:** Applications, CLI tools, secure apps.
-*   **Subsystem Space:** High-level services (VPN/Tor, IDS/IPS, Firewall, Nexus AI, Browser, etc.).
-*   **Daemon Space:** Core OS services (Paradigm, Aegis, Sage, Archivist, Cipher, Sentinel).
+*   **Subsystem Space:** High-level services (VPN/Tor, IDS/IPS, Firewall, Browser, etc.) plus privileged userspace components such as **Nexus**.
+*   **Daemon Space:** Core OS services (**Genesis**, **Paradigm**, **Sage**, **Archive**, **Tunnel**, **Veil**).
 *   **ReaperCore Microkernel:** The foundational layer providing basic mechanisms.
 *   **Hardware:** The physical substrate.
 
 ## 6. Core OS Components (Daemon Space)
 
-This section explains how key Reaper-OS daemons interact with ReaperCore and manage system policies. **The following outlines the current conceptual roles of core OS components. As the system evolves, the specific structure and responsibilities of these components (e.g., Paradigm, Sentinel, Aegis) may be refined and optimized to best serve the project's evolving security and performance objectives.**
+This section explains how key Reaper-OS daemons interact with ReaperCore and manage system policies. The current architecture deliberately separates bootstrap, long-lived policy, communication, storage, execution, and user-experience responsibilities into bounded roles.
 
-*   **Paradigm — Security & Mode Authority / Reality Orchestrator:** The "brain" or "god" of the multiverse. It applies mode capability templates, revokes/grants system capabilities, switches subsystem visibility, enforces multi-level security policies, and coordinates with Sentinel. It manages the creation/destruction of realities and switches processes between them.
-    *   *Microkernel Role:* Enforces Paradigm’s templates at the capability level and ensures atomic transitions.
-*   **Aegis — Capability Router & IPC Firewall / Reality Connector:** The "gatekeeper." Regulates inter-daemon communication, enforces IPC access rules, validates capability transfers, and monitors unauthorized messages. Handles handoffs between realities and special IPC channels.
-    *   *Microkernel Role:* Enforces IPC via capabilities and blocks unauthorized calls at the kernel boundary.
-*   **Archivist — Filesystem & Storage Server / Filesystem Interpreter:** Manages all user-space storage, filesystem drivers, persistent state, Ghost overlay filesystem, encrypted partitions, and storage optimizations. Controls what a process sees when it reads files.
-    *   *Microkernel Role:* Ensures memory protection and mediates device access.
-*   **Sage — High-Level Memory Policy Manager / Memory Master:** Supervises memory access, allocation strategy, ghost memory pools, secure mode quotas, and memory copy restrictions.
-    *   *Microkernel Role:* Provides raw memory mechanisms only and enforces protection through address spaces.
-*   **Cipher — Process, Namespace & Sandbox Manager / Process Identity & Security Context:** Defines the "worlds" processes live in. Manages process lifecycle, namespaces (PID, NET, MOUNT, USER, UTS), per-app sandboxes, and per-reality UID/GID and capability sets.
-    *   *Microkernel Role:* Handles low-level scheduling, assigns address spaces, and enforces namespace isolation.
-*   **Sentinel — Monitoring, Logging, Forensics / Threat Engine:** The OS "watchdog." Provides system-wide monitoring, syscall tracing, anomaly detection, forensic logging (Ghost), and escalation triggers. Scores threats and can recommend or force migration to different realities.
-    *   *Microkernel Role:* Creates secure event endpoints and forwards relevant exceptions and traps.
+*   **Genesis — Bootstrap Authority / First Process:** The short-lived bootstrapper. It receives `GENESIS_CAP`, creates the initial daemon set, performs first-handoff authority minting, transfers the audit authority directly to Paradigm's embedded Sentinel subsystem, then destroys its bootstrap authority and exits.
+    *   *Microkernel Role:* Exposes `GENESIS_CAP`, enforces the primitive creation path, and provides the raw mechanism for the initial userspace handoff.
+*   **Paradigm — Reality and Security Sovereign:** The ongoing authority for mode transitions, capability governance, recovery policy, and system-wide security shaping. Paradigm owns the Reality table and coordinates the higher-level policy consequences of every Phase Shift.
+    *   *Internal Sentinel subsystem:* A semi-independent audit and monitoring subsystem embedded within Paradigm's domain. Sentinel holds its own audit-write authority, maintains Fate Strings, observes Paradigm itself, and can escalate or halt independently.
+    *   *Microkernel Role:* Enforces Paradigm's capability templates and transition contracts at the kernel boundary.
+*   **Sage — Process and Execution Authority:** Owns process lifecycle, execution policy, namespaces, sandbox construction, and execution-environment shaping. This role absorbs the old split between process identity/security-context management and high-level memory/execution policy.
+    *   *Microkernel Role:* Supplies raw scheduling, thread, address-space, and mapping mechanisms while enforcing the low-level invariants.
+*   **Archive — Memory and Filesystem Authority:** Owns persistent storage, filesystem presentation, Ghost overlays, encrypted storage flows, and longer-lived memory/storage policy. Archive is the authoritative interpreter for what data a process sees and how that data persists.
+    *   *Microkernel Role:* Mediates memory protection, device access, and mapping primitives without embedding filesystem policy.
+*   **Tunnel — Communication Core:** Owns inter-domain communication strategy. Tunnel contains **Quantum Sync** for internal routing and the **Aegis Bridge** for external and cross-boundary communication surfaces.
+    *   *Microkernel Role:* Enforces IPC capabilities and blocks unauthorized message paths at the syscall boundary.
+*   **Veil — User Experience Core:** Owns compositor, shell, input orchestration, and the user-facing experience layer. Veil is responsible for presentation and human interaction, not security authority.
+    *   *Microkernel Role:* Provides only the primitive capability channels needed for display, input, and memory mapping.
+*   **Nexus — Privileged Userspace Component:** Nexus is not a core daemon. It sits above daemon space as a privileged subsystem/assistant surface, consuming policy and capability views that the core daemons expose.
 
 ## 7. Mode Operation Model
 
@@ -134,7 +143,7 @@ Reaper-OS supports four main modes, enforced by the microkernel via capability t
 ReaperCore enables high performance through:
 
 *   **Zero-Copy IPC:** Subsystems communicate via ring buffers and shared memory channels.
-*   **NVMe Userspace Driver (SPDK):** Archivist bypasses kernel overhead for extreme storage speeds.
+*   **NVMe Userspace Driver (SPDK):** Archive bypasses kernel overhead for extreme storage speeds.
 *   **Virtual GPU Acceleration:** User-space GPU drivers and protected VRAM capability regions.
 *   **Sidecar Kernel Core:** One CPU core handles kernel tasks, IPC dispatch, and mode transitions, reducing jitter.
 *   **Fast Mode Switching:** Because capabilities never change – only collapse rules change.
@@ -153,6 +162,7 @@ Reaper-OS security is guaranteed by:
 *   **Immutable State (Fate Strings):** Modifiable or erasable permissions do not exist; all change is additive and cryptographically linked, preventing stealthy escalation and state tampering.
 *   **Total Compartmentalization (Universe Layer):** Processes cannot escape or influence the real system when in Ghost or Shadow realities.
 *   **Zero Implicit Trust (Occult Contracts):** Every action requires an explicit, cryptographically sealed pact; nothing happens "because you're root."
+*   **Capability-Based Memory Protection:** Reaper-OS intentionally abandons Address Space Layout Randomization (ASLR) in favor of a stronger, deterministic capability-based memory protection model. Because memory access is governed by cryptographically unforgeable capabilities held by the process, a process cannot access memory outside its assigned regions, regardless of where that memory is located. This provides a hard, hardware-enforced guarantee that is mathematically superior to the probabilistic security provided by ASLR.
 
 ## 10. Multi-Device Ecosystem Support
 
@@ -171,7 +181,7 @@ The project follows a phased roadmap:
 
 *   **Phase 1 — Core Kernel & C-Space:** Memory, IPC, scheduling, capabilities (Completed in Epoch I).
 *   **Phase 2 — Hypervisor + Device Capabilities:** Virtualization + hardware abstractions.
-*   **Phase 3 — Core Daemons:** Paradigm, Aegis, Archivist, Sage, Cipher, Sentinel (Epoch III planning kickoff in progress after Epoch II MVP closure).
+*   **Phase 3 — Core Daemons:** Genesis bootstrap handoff, Paradigm, Sage, Archive, Tunnel, and Veil, with Sentinel embedded semi-independently inside Paradigm.
 *   **Phase 4 — Subsystems + Userland Drivers:** VPN, Tor, FS drivers, network stack.
 *   **Phase 5 — Mode templates + Performance Optimizations.**
 *   **Phase 6 — Ghost Mode integration + malware sandbox support.**

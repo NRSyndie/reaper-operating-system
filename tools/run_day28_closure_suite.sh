@@ -65,6 +65,15 @@ for ((i = 1; i <= RUNS; i++)); do
         fi
     done
 
+    if ! grep -Eq '^\[LAW2_ATTEST\] day=28 result=PASS' "${serial_file}"; then
+        echo "ERROR: run ${i} missing Day 28 kernel attestation PASS marker" >&2
+        exit 1
+    fi
+    if grep -Eq '^\[LAW2_ATTEST\] day=28 result=FAIL' "${serial_file}"; then
+        echo "ERROR: run ${i} contains Day 28 kernel attestation FAIL marker" >&2
+        exit 1
+    fi
+
     if grep -Fq "[DAY28-FAIL]" "${serial_file}"; then
         echo "ERROR: run ${i} contains Day 28 forbidden marker: [DAY28-FAIL]" >&2
         exit 1

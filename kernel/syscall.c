@@ -35,8 +35,15 @@ static const uint64_t USER_VA_LIMIT = 0x0000800000000000ULL;
 static syscall_metrics_t g_sys_metrics = {0};
 static bool g_sys_audit_stub_marker_emitted = false;
 static uint64_t g_sys_percall[64] = {0};
+static uint64_t g_day29_reason_mask = 0;
 
-/* SYS_MAP/SYS_UNMAP control bit kept as tolerated legacy marker. */
+#define LAW2_ATTEST_EVIDENCE_VERSION 2U
+#define LAW2_DAY28_MIN_STRICT_MAP_CALLS 8ULL
+#define LAW2_DAY29_MIN_STRICT_UNMAP_CALLS 3ULL
+#define LAW2_DAY29_UNMAP_CYCLES_BUDGET 2000000ULL
+#define LAW2_DAY30_SCAN_CYCLES_BUDGET 5000000ULL
+
+/* Strict map/unmap now require ctrl bit0 set; no legacy-zero path. */
 #define SYS_MAP_STRICT_FLAG   (1ULL << 0)
 #define SYS_UNMAP_STRICT_FLAG (1ULL << 0)
 /* Strict user-allowed PTE bits. */
@@ -72,7 +79,8 @@ enum {
     SYS_SCHED_METRICS = 21,
     SYS_SCHED_AUTH_ROOT_MINT = 22,
     SYS_SCHED_AUTH_THREAD_DERIVE = 23,
-    SYS_MODE_TRANSITION = 24
+    SYS_MODE_TRANSITION = 24,
+    SYS_LAW2_ATTEST = 25
 };
 
 static int gate_op_to_legacy_sys(uint64_t op) {
@@ -102,6 +110,7 @@ static int gate_op_to_legacy_sys(uint64_t op) {
         case GATE_OP_SCHED_AUTH_ROOT_MINT: return SYS_SCHED_AUTH_ROOT_MINT;
         case GATE_OP_SCHED_AUTH_THREAD_DERIVE: return SYS_SCHED_AUTH_THREAD_DERIVE;
         case GATE_OP_MODE_TRANSITION: return SYS_MODE_TRANSITION;
+        case GATE_OP_LAW2_ATTEST: return SYS_LAW2_ATTEST;
         default: return -1;
     }
 }
@@ -109,7 +118,7 @@ static int gate_op_to_legacy_sys(uint64_t op) {
 static void syscall_diag_emit_periodic(void) {
     if ((g_sys_metrics.total_calls & 0x3FFULL) != 0) return; /* Every 1024 calls */
 
-    kprintf("[SYSCALL-DIAG] total=%lu fault=%lu invalid=%lu perm=%lu map=%lu strict=%lu unmap=%lu strict_u=%lu tlb_flush=%lu\n",
+    kprintf("[SYSCALL-DIAG] total=%lu fault=%lu invalid=%lu perm=%lu map=%lu strict=%lu unmap=%lu strict_u=%lu unmap_ok=%lu uctrl=%lu uparent=%lu urights=%lu uindex=%lu umax=%lu tlb_flush=%lu\n",
             g_sys_metrics.total_calls,
             g_sys_metrics.fault_rejects,
             g_sys_metrics.invalid_rejects,
@@ -118,6 +127,12 @@ static void syscall_diag_emit_periodic(void) {
             g_sys_metrics.map_strict_calls,
             g_sys_metrics.unmap_calls,
             g_sys_metrics.unmap_strict_calls,
+            g_sys_metrics.unmap_success_calls,
+            g_sys_metrics.unmap_fail_ctrl,
+            g_sys_metrics.unmap_fail_parent,
+            g_sys_metrics.unmap_fail_rights,
+            g_sys_metrics.unmap_fail_index,
+            g_sys_metrics.unmap_strict_cycles_max,
             g_sys_metrics.tlb_flushes);
 }
 
@@ -131,6 +146,7 @@ void syscall_reset_metrics(void) {
     fast_zero(&g_sys_metrics, sizeof(g_sys_metrics));
     fast_zero(g_sys_percall, sizeof(g_sys_percall));
     g_sys_audit_stub_marker_emitted = false;
+    g_day29_reason_mask = 0;
 }
 
 bool syscall_self_test(void) {
@@ -293,6 +309,39 @@ static uint64_t syscall_map_validate_parent(process_t* owner,
     return 0;
 }
 
+static uint64_t syscall_unmap_validate_parent(process_t* owner,
+                                              uint32_t parent_slot,
+                                              uint64_t index,
+                                              cap_identity_t** out_parent_ident,
+                                              uint64_t* out_day29_reason_mask) {
+    cap_identity_t* parent_ident = cap_lookup(owner->cspace, parent_slot);
+
+    if (!parent_ident || parent_ident->type != CAP_TYPE_PAGETABLE) {
+        g_sys_metrics.map_fail_parent++;
+        g_sys_metrics.unmap_fail_parent++;
+        g_sys_metrics.invalid_rejects++;
+        if (out_day29_reason_mask) *out_day29_reason_mask |= LAW2_DAY29_REASON_PARENT_DENY;
+        return (uint64_t)-1;
+    }
+    if (!(parent_ident->rights & CAP_RIGHT_WRITE)) {
+        g_sys_metrics.map_fail_rights++;
+        g_sys_metrics.unmap_fail_rights++;
+        g_sys_metrics.perm_rejects++;
+        if (out_day29_reason_mask) *out_day29_reason_mask |= LAW2_DAY29_REASON_RIGHTS_DENY;
+        return (uint64_t)-1;
+    }
+    if (index >= 512) {
+        g_sys_metrics.map_fail_index++;
+        g_sys_metrics.unmap_fail_index++;
+        g_sys_metrics.invalid_rejects++;
+        if (out_day29_reason_mask) *out_day29_reason_mask |= LAW2_DAY29_REASON_INDEX_DENY;
+        return (uint64_t)-1;
+    }
+
+    *out_parent_ident = parent_ident;
+    return 0;
+}
+
 static uint64_t syscall_map_validate_child(process_t* owner,
                                            uint32_t child_slot,
                                            uint64_t flags,
@@ -377,17 +426,11 @@ static uint64_t syscall_map_entry(process_t* owner,
                                   uint32_t child_slot,
                                   uint64_t flags,
                                   uint64_t ctrl) {
-    if ((ctrl & ~SYS_MAP_STRICT_FLAG) != 0) {
+    if (ctrl != SYS_MAP_STRICT_FLAG) {
         g_sys_metrics.map_fail_flags++;
         g_sys_metrics.invalid_rejects++;
         return (uint64_t)-1;
     }
-
-    /*
-     * Strict-only behavior is now always active.
-     * bit0 is accepted for ABI continuity but does not alter semantics.
-     */
-    (void)ctrl;
     g_sys_metrics.map_calls++;
     g_sys_metrics.map_strict_calls++;
     return syscall_map_execute(owner, MAP_EXEC_MAP, parent_slot, index, child_slot, flags);
@@ -397,19 +440,135 @@ static uint64_t syscall_unmap_entry(process_t* owner,
                                     uint32_t parent_slot,
                                     uint64_t index,
                                     uint64_t ctrl) {
-    if ((ctrl & ~SYS_UNMAP_STRICT_FLAG) != 0) {
+    uint64_t tsc_start = rdtsc();
+    uint64_t tsc_end;
+    uint64_t duration;
+
+    g_sys_metrics.unmap_calls++;
+    if (ctrl != SYS_UNMAP_STRICT_FLAG) {
         g_sys_metrics.invalid_rejects++;
+        g_sys_metrics.unmap_fail_ctrl++;
+        g_day29_reason_mask |= LAW2_DAY29_REASON_CTRL_DENY;
+        return (uint64_t)-1;
+    }
+    g_sys_metrics.unmap_strict_calls++;
+
+    cap_identity_t* parent_ident = NULL;
+    if (syscall_unmap_validate_parent(owner, parent_slot, index, &parent_ident, &g_day29_reason_mask) != 0) {
         return (uint64_t)-1;
     }
 
-    /*
-     * Strict-only behavior is now always active.
-     * bit0 is accepted for ABI continuity but does not alter semantics.
-     */
-    (void)ctrl;
-    g_sys_metrics.unmap_calls++;
-    g_sys_metrics.unmap_strict_calls++;
-    return syscall_map_execute(owner, MAP_EXEC_UNMAP, parent_slot, index, 0, 0);
+    vmm_set_entry(parent_ident->object_ptr, index, 0);
+    invpcid_flush_all();
+    g_sys_metrics.tlb_flushes++;
+    g_sys_metrics.unmap_success_calls++;
+    g_day29_reason_mask |= LAW2_DAY29_REASON_AUTH_OK;
+
+    tsc_end = rdtsc();
+    duration = tsc_end - tsc_start;
+    g_sys_metrics.unmap_strict_cycles_total += duration;
+    if (duration > g_sys_metrics.unmap_strict_cycles_max) {
+        g_sys_metrics.unmap_strict_cycles_max = duration;
+    }
+    return 0;
+}
+
+static uint16_t law2_day28_reason(const gate_law2_attest_t* out) {
+    if (out->map_calls != out->map_strict_calls) return 1;
+    if (out->map_strict_calls < LAW2_DAY28_MIN_STRICT_MAP_CALLS) return 2;
+    if (out->map_fail_index < 1) return 3;
+    if (out->map_fail_child < 1) return 4;
+    if (out->map_fail_flags < 2) return 5;
+    return 0;
+}
+
+static uint16_t law2_day29_reason(const gate_law2_attest_t* out) {
+    if (out->unmap_calls < out->unmap_strict_calls) return 1;
+    if (out->unmap_strict_calls < LAW2_DAY29_MIN_STRICT_UNMAP_CALLS) return 2;
+    if (out->map_calls != out->map_strict_calls) return 3;
+    if ((out->day29_reason_mask & LAW2_DAY29_REASON_MASK_REQUIRED) != LAW2_DAY29_REASON_MASK_REQUIRED) return 4;
+    if (out->day29_unmap_cycles_max > out->day29_perf_budget_cycles) return 5;
+    return 0;
+}
+
+static uint64_t law2_day30_reason_bit(uint32_t reject_reason) {
+    switch (reject_reason) {
+        case MODE_REJECT_EDGE_ILLEGAL:
+            return LAW2_DAY30_REASON_EDGE_ILLEGAL;
+        case MODE_REJECT_AUTH_REQUIRED:
+            return LAW2_DAY30_REASON_AUTH_REQUIRED;
+        case MODE_REJECT_SPECIAL_KEY_REQUIRED:
+            return LAW2_DAY30_REASON_SPECIAL_KEY_REQ;
+        case MODE_REJECT_COOLDOWN_ACTIVE:
+            return LAW2_DAY30_REASON_COOLDOWN_ACTIVE;
+        default:
+            return 0;
+    }
+}
+
+static uint16_t law2_day30_reason(gate_law2_attest_t* out) {
+    struct mode_transition* recs;
+    int count;
+    uint64_t reject_with_reason = 0;
+    uint64_t reason_mask = 0;
+    int i;
+    uint64_t tsc_start = rdtsc();
+    uint64_t tsc_end;
+
+    recs = (struct mode_transition*)kzalloc(sizeof(struct mode_transition) * MODE_HISTORY_SIZE);
+    if (!recs) return 1;
+
+    count = mode_get_history_filtered(recs, MODE_HISTORY_SIZE, FATE_READ_TRANSITIONS);
+    if (count <= 0) {
+        kfree(recs);
+        return 1;
+    }
+    for (i = 0; i < count; i++) {
+        if (recs[i].record_type != FATE_RECORD_TRANSITION) continue;
+        if (recs[i].result_code != FATE_RESULT_REJECTED) continue;
+        if (recs[i].fault_error_code == MODE_REJECT_NONE) continue;
+        reject_with_reason++;
+        reason_mask |= law2_day30_reason_bit(recs[i].fault_error_code);
+    }
+
+    tsc_end = rdtsc();
+    out->transition_reject_with_reason = reject_with_reason;
+    out->day30_reason_mask = reason_mask;
+    out->day30_reject_scan_cycles = tsc_end - tsc_start;
+    out->day30_perf_budget_cycles = LAW2_DAY30_SCAN_CYCLES_BUDGET;
+    kfree(recs);
+    if (reject_with_reason == 0) return 2;
+    if ((reason_mask & LAW2_DAY30_REASON_MASK_REQUIRED) != LAW2_DAY30_REASON_MASK_REQUIRED) return 3;
+    if (out->day30_reject_scan_cycles > out->day30_perf_budget_cycles) return 4;
+    return 0;
+}
+
+static void law2_collect_attestation(gate_law2_attest_t* out, uint16_t* day28_reason, uint16_t* day29_reason, uint16_t* day30_reason) {
+    memset(out, 0, sizeof(*out));
+    out->evidence_version = LAW2_ATTEST_EVIDENCE_VERSION;
+    out->map_calls = g_sys_metrics.map_calls;
+    out->map_strict_calls = g_sys_metrics.map_strict_calls;
+    out->unmap_calls = g_sys_metrics.unmap_calls;
+    out->unmap_strict_calls = g_sys_metrics.unmap_strict_calls;
+    out->map_fail_index = g_sys_metrics.map_fail_index;
+    out->map_fail_child = g_sys_metrics.map_fail_child;
+    out->map_fail_flags = g_sys_metrics.map_fail_flags;
+    out->day29_reason_mask = g_day29_reason_mask;
+    out->day29_unmap_cycles_max = g_sys_metrics.unmap_strict_cycles_max;
+    if (g_sys_metrics.unmap_success_calls > 0) {
+        out->day29_unmap_cycles_avg = g_sys_metrics.unmap_strict_cycles_total / g_sys_metrics.unmap_success_calls;
+    } else {
+        out->day29_unmap_cycles_avg = 0;
+    }
+    out->day29_perf_budget_cycles = LAW2_DAY29_UNMAP_CYCLES_BUDGET;
+
+    *day28_reason = law2_day28_reason(out);
+    *day29_reason = law2_day29_reason(out);
+    *day30_reason = law2_day30_reason(out);
+
+    out->day28_status = (*day28_reason == 0) ? 1U : 0U;
+    out->day29_status = (*day29_reason == 0) ? 1U : 0U;
+    out->day30_status = (*day30_reason == 0) ? 1U : 0U;
 }
 
 void syscall_init(void) {
@@ -456,54 +615,154 @@ void syscall_init(void) {
     }
 
 /* Helper for IPC Endpoint invocation */
-static uint64_t ipc_invoke_endpoint(cap_identity_t* ident, uint64_t a0, uint64_t a1, uint64_t a2) {
+uint64_t ipc_invoke_endpoint(cap_identity_t* ident, uint64_t a0, uint64_t a1, uint64_t a2, uint64_t options) {
     ipc_endpoint_t* ep = (ipc_endpoint_t*)ident->object_ptr;
     thread_t* caller = scheduler_get_current();
 
     if (!ep) return -1;
 
-    /* 1. Check for a waiting receiver (Rendezvous) */
-    if (ep->wait_head) {
-        thread_t* receiver = ep->wait_head;
-        ep->wait_head = receiver->wait_next;
-        if (!ep->wait_head) ep->wait_tail = NULL;
+    uint64_t flags = spinlock_irqsave(&ep->lock);
 
-        
-        /* Transfer Data (Register-Only) */
-        receiver->ipc_payload[0] = a0;
-        receiver->ipc_payload[1] = a1;
-        receiver->ipc_payload[2] = a2;
-        receiver->ipc_payload[3] = ident->badge;
-
-        /* Wake Receiver */
-        scheduler_wake(receiver);
-
-        return 0; /* Success */
-    }
-
-    /* 2. No receiver waiting: Block the sender (Synchronous IPC) */
-    
-    scheduler_block(caller);
-    caller->ipc_payload[0] = a0;
-    caller->ipc_payload[1] = a1;
-    caller->ipc_payload[2] = a2;
-    caller->wait_next = NULL;
-
-    if (!ep->wait_head) {
-        ep->wait_head = caller;
-        ep->wait_tail = caller;
+    /* Determine Operation: SEND or RECEIVE based on options and rights */
+    bool is_send = false;
+    if (options == CAP_INVOKE_OPT_SEND) {
+        is_send = true;
+    } else if (options == CAP_INVOKE_OPT_RECV) {
+        is_send = false;
     } else {
-        ep->wait_tail->wait_next = caller;
-        ep->wait_tail = caller;
+        /* AUTO: SEND if WRITE right present, else RECEIVE if READ right present */
+        if (ident->rights & CAP_RIGHT_WRITE) {
+            is_send = true;
+        } else if (ident->rights & CAP_RIGHT_READ) {
+            is_send = false;
+        } else {
+            /* No appropriate rights for AUTO */
+            spinlock_irqrestore(&ep->lock, flags);
+            return -1;
+        }
     }
 
-    /* Reschedule since we are blocked */
-    schedule();
+    if (is_send) {
+        /* Check rights for forced SEND */
+        if (!(ident->rights & CAP_RIGHT_WRITE)) {
+            spinlock_irqrestore(&ep->lock, flags);
+            return -1;
+        }
 
-    /* When we wake up, our return value is what the receiver sent back.
-     * For now, just return success.
-     */
-    return 0;
+        /* --- SEND OPERATION --- */
+        
+        /* 1. Check for a waiting receiver (Rendezvous) */
+        if (ep->recv_head) {
+            thread_t* receiver = ep->recv_head;
+            ep->recv_head = receiver->wait_next;
+            if (!ep->recv_head) ep->recv_tail = NULL;
+
+            /* Transfer Data (Register-Only) */
+            receiver->ipc_payload[0] = a0;
+            receiver->ipc_payload[1] = a1;
+            receiver->ipc_payload[2] = a2;
+            receiver->ipc_payload[3] = ident->badge;
+
+            /* Wake Receiver */
+            scheduler_wake(receiver);
+            spinlock_irqrestore(&ep->lock, flags);
+            return 0;
+        }
+
+        /* 2. Buffer the message if space available (Asynchronous) */
+        if (ep->count < IPC_BUFFER_SIZE) {
+            uint32_t idx = ep->tail;
+            ep->buffer[idx].data[0] = a0;
+            ep->buffer[idx].data[1] = a1;
+            ep->buffer[idx].data[2] = a2;
+            ep->buffer[idx].data[3] = ident->badge;
+            
+            ep->tail = (ep->tail + 1) % IPC_BUFFER_SIZE;
+            ep->count++;
+            
+            spinlock_irqrestore(&ep->lock, flags);
+            return 0;
+        }
+
+        /* 3. Buffer full: Block the sender (Synchronous fallback) */
+        scheduler_block(caller);
+        caller->ipc_payload[0] = a0;
+        caller->ipc_payload[1] = a1;
+        caller->ipc_payload[2] = a2;
+        caller->ipc_payload[3] = ident->badge;
+        caller->wait_next = NULL;
+
+        if (!ep->send_head) {
+            ep->send_head = caller;
+            ep->send_tail = caller;
+        } else {
+            ep->send_tail->wait_next = caller;
+            ep->send_tail = caller;
+        }
+
+        spinlock_irqrestore(&ep->lock, flags);
+        schedule();
+        return 0;
+
+    } else {
+        /* Check rights for forced RECEIVE */
+        if (!(ident->rights & CAP_RIGHT_READ)) {
+            spinlock_irqrestore(&ep->lock, flags);
+            return -1;
+        }
+
+        /* --- RECEIVE OPERATION --- */
+
+        /* 1. Check buffer first */
+        if (ep->count > 0) {
+            uint32_t idx = ep->head;
+            caller->ipc_payload[0] = ep->buffer[idx].data[0];
+            caller->ipc_payload[1] = ep->buffer[idx].data[1];
+            caller->ipc_payload[2] = ep->buffer[idx].data[2];
+            caller->ipc_payload[3] = ep->buffer[idx].data[3];
+
+            ep->head = (ep->head + 1) % IPC_BUFFER_SIZE;
+            ep->count--;
+
+            /* 2. Wake a blocked sender if any */
+            if (ep->send_head) {
+                thread_t* sender = ep->send_head;
+                ep->send_head = sender->wait_next;
+                if (!ep->send_head) ep->send_tail = NULL;
+
+                /* Push blocked sender's message into the now-vacant buffer slot */
+                uint32_t nidx = ep->tail;
+                ep->buffer[nidx].data[0] = sender->ipc_payload[0];
+                ep->buffer[nidx].data[1] = sender->ipc_payload[1];
+                ep->buffer[nidx].data[2] = sender->ipc_payload[2];
+                ep->buffer[nidx].data[3] = sender->ipc_payload[3];
+
+                ep->tail = (ep->tail + 1) % IPC_BUFFER_SIZE;
+                ep->count++;
+
+                scheduler_wake(sender);
+            }
+
+            spinlock_irqrestore(&ep->lock, flags);
+            return 0;
+        }
+
+        /* 3. Buffer empty: Block the receiver */
+        scheduler_block(caller);
+        caller->wait_next = NULL;
+
+        if (!ep->recv_head) {
+            ep->recv_head = caller;
+            ep->recv_tail = caller;
+        } else {
+            ep->recv_tail->wait_next = caller;
+            ep->recv_tail = caller;
+        }
+
+        spinlock_irqrestore(&ep->lock, flags);
+        schedule();
+        return 0;
+    }
 }
 
 /**
@@ -620,7 +879,7 @@ uint64_t syscall_dispatcher(uint64_t num, uint64_t a0, uint64_t a1, uint64_t a2,
             }
 
             if (ident->type == CAP_TYPE_ENDPOINT) {
-                ret = ipc_invoke_endpoint(ident, a1, a2, a3);
+                ret = ipc_invoke_endpoint(ident, a1, a2, a3, a4);
             } else {
                 g_sys_metrics.invalid_rejects++;
                 ret = -1;
@@ -1006,7 +1265,7 @@ uint64_t syscall_dispatcher(uint64_t num, uint64_t a0, uint64_t a1, uint64_t a2,
                 break;
             }
 
-            if (read_mode > FATE_READ_LATTICE) {
+            if (read_mode > FATE_READ_ATTEST) {
                 g_sys_metrics.invalid_rejects++;
                 ret = (uint64_t)-1;
                 break;
@@ -1058,6 +1317,64 @@ uint64_t syscall_dispatcher(uint64_t num, uint64_t a0, uint64_t a1, uint64_t a2,
             
             kfree(kernel_buf);
             ret = (uint64_t)copied;
+            break;
+        }
+
+        case SYS_LAW2_ATTEST: {
+            gate_law2_attest_t out;
+            gate_law2_attest_t* user_out = (gate_law2_attest_t*)a0;
+            uint64_t user_size = a1;
+            uint16_t day28_reason = 0;
+            uint16_t day29_reason = 0;
+            uint16_t day30_reason = 0;
+
+            if (user_out == NULL || user_size < sizeof(gate_law2_attest_t)) {
+                g_sys_metrics.invalid_rejects++;
+                ret = (uint64_t)-1;
+                break;
+            }
+
+            if (!validate_user_range_write((uint64_t)user_out, sizeof(gate_law2_attest_t))) {
+                ret = (uint64_t)-1;
+                break;
+            }
+
+            law2_collect_attestation(&out, &day28_reason, &day29_reason, &day30_reason);
+
+            mode_log_law2_attestation(28, out.day28_status ? FATE_RESULT_ACCEPTED : FATE_RESULT_REJECTED, day28_reason, (uint32_t)out.map_strict_calls);
+            mode_log_law2_attestation(29, out.day29_status ? FATE_RESULT_ACCEPTED : FATE_RESULT_REJECTED, day29_reason, (uint32_t)out.unmap_strict_calls);
+            mode_log_law2_attestation(30, out.day30_status ? FATE_RESULT_ACCEPTED : FATE_RESULT_REJECTED, day30_reason, (uint32_t)out.transition_reject_with_reason);
+
+            kprintf("[LAW2_ATTEST] day=28 result=%s reason=%u strict_map=%lu fail_index=%lu fail_child=%lu fail_flags=%lu\n",
+                    out.day28_status ? "PASS" : "FAIL",
+                    (unsigned)day28_reason,
+                    out.map_strict_calls,
+                    out.map_fail_index,
+                    out.map_fail_child,
+                    out.map_fail_flags);
+            kprintf("[LAW2_ATTEST] day=29 result=%s reason=%u strict_unmap=%lu strict_map=%lu reason_mask=0x%lx unmap_max=%lu unmap_avg=%lu budget=%lu\n",
+                    out.day29_status ? "PASS" : "FAIL",
+                    (unsigned)day29_reason,
+                    out.unmap_strict_calls,
+                    out.map_strict_calls,
+                    out.day29_reason_mask,
+                    out.day29_unmap_cycles_max,
+                    out.day29_unmap_cycles_avg,
+                    out.day29_perf_budget_cycles);
+            kprintf("[LAW2_ATTEST] day=30 result=%s reason=%u reject_reason_events=%lu reason_mask=0x%lx scan_cycles=%lu budget=%lu\n",
+                    out.day30_status ? "PASS" : "FAIL",
+                    (unsigned)day30_reason,
+                    out.transition_reject_with_reason,
+                    out.day30_reason_mask,
+                    out.day30_reject_scan_cycles,
+                    out.day30_perf_budget_cycles);
+
+            if (!copy_to_user(user_out, &out, sizeof(out))) {
+                ret = (uint64_t)-1;
+                break;
+            }
+
+            ret = 0;
             break;
         }
 

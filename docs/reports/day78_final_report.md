@@ -1,4 +1,4 @@
-# Day 34 Final Report: Real Fault Probe Validation (No Synthetic Injection)
+# Epoch III, Day 78: Day 34 Enhancement Ratification (Real-Path Provenance + Audit-Budget Gate)
 
 ## 1. Overview
 Day 34 moved fault-forensics validation from synthetic injection to a real user exception path.
@@ -27,3 +27,17 @@ Day 34 moved fault-forensics validation from synthetic injection to a real user 
 
 ## 4. Status Impact
 - Fault-to-String is now validated on an actual exception path without relying on synthetic kernel-injected events.
+
+## 5. Enhancement Ratification (Epoch III, Day 78)
+- Day 34 was promoted to closure-grade enforcement with deterministic runtime gates:
+  - `[TEST] Day 34 Real Fault Path Contract: SUCCESS.`
+  - `[TEST] Day 34 User Fault Provenance Contract: SUCCESS.`
+  - `[TEST] Day 34 Real Fault Performance Contract: SUCCESS.`
+- Day 34 closure now enforces:
+  - deterministic real-path lattice first-touch `#PF` evidence in Fate fault windows
+  - sampled real-fault user provenance and context integrity checks
+  - bounded real-fault audit runtime budget with explicit `[DAY34-FAIL]` fail path
+- Closure artifacts added:
+  - `docs/components/day34/day34_closure_contract.md`
+  - `tools/run_day34_closure_suite.sh`
+  - `make -C kernel verify_day34`

@@ -58,12 +58,23 @@ for ((i = 1; i <= RUNS; i++)); do
     for marker in \
         "[TEST] Day 29 Strict Unmap Adoption Contract: SUCCESS." \
         "[TEST] Day 29 Runtime Validation Contract: SUCCESS." \
-        "[TEST] Day 29 Strict Path Runtime Contract: SUCCESS."; do
+        "[TEST] Day 29 Strict Path Runtime Contract: SUCCESS." \
+        "[TEST] Day 29 Reason Coverage Contract: SUCCESS." \
+        "[TEST] Day 29 Performance Budget Contract: SUCCESS."; do
         if ! grep -Fq "${marker}" "${serial_file}"; then
             echo "ERROR: run ${i} missing Day 29 marker: ${marker}" >&2
             exit 1
         fi
     done
+
+    if ! grep -Eq '^\[LAW2_ATTEST\] day=29 result=PASS' "${serial_file}"; then
+        echo "ERROR: run ${i} missing Day 29 kernel attestation PASS marker" >&2
+        exit 1
+    fi
+    if grep -Eq '^\[LAW2_ATTEST\] day=29 result=FAIL' "${serial_file}"; then
+        echo "ERROR: run ${i} contains Day 29 kernel attestation FAIL marker" >&2
+        exit 1
+    fi
 
     if grep -Fq "[DAY29-FAIL]" "${serial_file}"; then
         echo "ERROR: run ${i} contains Day 29 forbidden marker: [DAY29-FAIL]" >&2

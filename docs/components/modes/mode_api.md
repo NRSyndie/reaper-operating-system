@@ -63,7 +63,7 @@ Copies most-recent Fate records using a record-type filter.
 - **Parameters:**
     - `buffer`: Array of `struct mode_transition`.
     - `count`: Maximum number of records to copy.
-    - `mode`: `FATE_READ_ALL`, `FATE_READ_TRANSITIONS`, `FATE_READ_FAULTS`, or `FATE_READ_LATTICE`.
+    - `mode`: `FATE_READ_ALL`, `FATE_READ_TRANSITIONS`, `FATE_READ_FAULTS`, `FATE_READ_LATTICE`, or `FATE_READ_ATTEST`.
 - **Returns:** Number of copied records.
 - **Ordering:** Newest-first within the selected filter.
 
@@ -71,6 +71,11 @@ Copies most-recent Fate records using a record-type filter.
 Appends a fault-type Fate record (used by exception paths).
 - **Current integration:** Used for Page Fault (`#PF`, vector 14) and General Protection Fault (`#GP`, vector 13).
 - **Metadata:** Captures `fault_vector`, `fault_error_code`, `fault_rip`, `fault_cr2`, `fault_rsp`, `fault_cs`, and `fault_rflags`.
+
+### `void mode_log_law2_attestation(uint8_t day_id, fate_result_t result, uint16_t reason_code, uint32_t detail)`
+Appends a kernel-owned Law 2 closure attestation record (`FATE_RECORD_ATTEST`).
+- **Usage:** Day 28/29/30 closure evidence path.
+- **Metadata:** `fault_vector=day_id`, `result_code=PASS/FAIL`, `fault_error_code=reason_code`, `fault_rip=detail`.
 
 ## 5. Convenient Macros
 

@@ -153,6 +153,7 @@ bool slab_get_metrics(const slab_cache_t* cache, slab_metrics_t* out_metrics) {
 }
 
 void slab_init(void) {
+    kprintf("[SLAB] Initializing Slab Allocator...\n");
     global_cache_list = NULL;
     kmalloc_init();
 }

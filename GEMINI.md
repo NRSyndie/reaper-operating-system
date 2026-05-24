@@ -87,6 +87,7 @@ The kernel exposes a minimal set of syscalls (defined in `shared/include/syscall
 - **Epoch I (Completed):** Core kernel primitives (Memory, IPC, Threads, Capabilities).
 - **Epoch II (Completed):** Core Daemons (Paradigm), Mode logic, Fate Strings, and foundational hardening.
 - **Epoch III (In Progress):** Final-Product Closure.
-    - **Active Slice:** Days 46/47/54/55 (Envelope Pipeline, Day 5R Bridge, ESAK Scheduler, Void Gate Redesign).
-    - **Latest Milestone:** Day 11 Void Gate Redesign Closure (Entry Pipeline + Lease Enforcement) verified via matrix.
+    - **Active Slice:** Days 80 (Audit Pipeline, Fate String Foundation, Seed Rotation).
+    - **Latest Milestone:** Day 80 Audit Foundation Closure (128-byte alignment + Gap Transparency + Reality-bound seeding) verified via matrix.
     - **Next Steps:** Phase 3/4 hardware-backend envelope migration (MPK/VMFUNC) and final evidence re-baseline.
+

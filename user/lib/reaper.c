@@ -17,15 +17,16 @@ static uint64_t do_syscall(uint64_t num, uint64_t a0, uint64_t a1, uint64_t a2, 
     return ret;
 }
 
+static gate_call_msg_t g_gate_msg __attribute__((aligned(8)));
+
 static int do_gate_call(uint64_t op, uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) {
-    gate_call_msg_t msg;
-    msg.args[0] = a0;
-    msg.args[1] = a1;
-    msg.args[2] = a2;
-    msg.args[3] = a3;
-    msg.args[4] = a4;
-    msg.args[5] = 0;
-    return (int)do_syscall(SYS_GATE_CALL, op, (uint64_t)&msg, sizeof(msg), 0, 0);
+    g_gate_msg.args[0] = a0;
+    g_gate_msg.args[1] = a1;
+    g_gate_msg.args[2] = a2;
+    g_gate_msg.args[3] = a3;
+    g_gate_msg.args[4] = a4;
+    g_gate_msg.args[5] = 0;
+    return (int)do_syscall(SYS_GATE_CALL, op, (uint64_t)&g_gate_msg, sizeof(g_gate_msg), 0, 0);
 }
 
 /* Public API */
@@ -66,16 +67,12 @@ int sys_map(uint32_t parent_cap, uint32_t index, uint32_t child_cap, uint64_t fl
     return do_gate_call(GATE_OP_MAP, parent_cap, index, child_cap, flags, 1);
 }
 
-int sys_map_strict(uint32_t parent_cap, uint32_t index, uint32_t child_cap, uint64_t flags) {
-    return sys_map(parent_cap, index, child_cap, flags);
-}
-
 int sys_unmap(uint32_t parent_cap, uint32_t index) {
     return do_gate_call(GATE_OP_UNMAP, parent_cap, index, 1, 0, 0);
 }
 
-int sys_unmap_strict(uint32_t parent_cap, uint32_t index) {
-    return sys_unmap(parent_cap, index);
+int sys_unmap_ctrl(uint32_t parent_cap, uint32_t index, uint64_t ctrl) {
+    return do_gate_call(GATE_OP_UNMAP, parent_cap, index, ctrl, 0, 0);
 }
 
 int sys_cap_retype(uint32_t src, uint32_t dst, uint32_t new_type, uint32_t badge) {
@@ -114,6 +111,14 @@ int sys_cap_mint(uint32_t src, uint32_t dst, uint16_t rights, uint32_t badge, ui
     return do_gate_call(GATE_OP_CAP_MINT, src, dst, rights, badge, modes);
 }
 
+int sys_cap_invoke(uint32_t slot, uint64_t a0, uint64_t a1, uint64_t a2) {
+    return do_gate_call(GATE_OP_CAP_INVOKE, slot, a0, a1, a2, 0);
+}
+
+int sys_cap_invoke_ex(uint32_t slot, uint64_t a0, uint64_t a1, uint64_t a2, uint64_t options) {
+    return do_gate_call(GATE_OP_CAP_INVOKE, slot, a0, a1, a2, options);
+}
+
 int sys_fate_read(void* buffer, int count, uint32_t audit_cap) {
     return do_gate_call(GATE_OP_FATE_READ, (uint64_t)buffer, (uint64_t)count, (uint64_t)audit_cap, FATE_READ_ALL, 0);
 }
@@ -124,6 +129,10 @@ int sys_fate_read_ex(void* buffer, int count, uint32_t audit_cap, uint32_t read_
 
 int sys_audit(uint64_t target_pid, uint64_t flags, void* out_buf, uint64_t count) {
     return do_gate_call(GATE_OP_AUDIT, target_pid, flags, (uint64_t)out_buf, count, 0);
+}
+
+int sys_law2_attest(gate_law2_attest_t* out_attest) {
+    return do_gate_call(GATE_OP_LAW2_ATTEST, (uint64_t)out_attest, sizeof(*out_attest), 0, 0, 0);
 }
 
 int sys_sched_metrics(gate_sched_metrics_t* out_metrics) {
@@ -155,4 +164,17 @@ int sys_sched_auth_thread_derive(uint32_t root_slot,
                         max_slice,
                         weight,
                         local_max_accumulated);
+}
+
+int sys_genesis_invoke(uint32_t genesis_slot,
+                       uint32_t op,
+                       const void* req,
+                       uint64_t req_size,
+                       void* resp) {
+    return do_gate_call(GATE_OP_GENESIS_INVOKE,
+                        genesis_slot,
+                        op,
+                        (uint64_t)req,
+                        req_size,
+                        (uint64_t)resp);
 }

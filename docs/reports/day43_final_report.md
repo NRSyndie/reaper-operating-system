@@ -43,4 +43,4 @@ Day 43 completed the Epoch III security contract freeze entry by combining:
 
 ## 5. Status Impact
 - Day 43 entry is complete (`Security Contract Freeze` achieved).
-- Epoch III now has a fail-closed audit syscall placeholder and a single source-of-truth zero-residue policy baseline to guide implementation phases.
+- Epoch III now has a fail-closed audit syscall stub contract and a single source-of-truth zero-residue policy baseline to guide implementation phases.

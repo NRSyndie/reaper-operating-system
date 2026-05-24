@@ -375,8 +375,8 @@
         *   Strict mode rejects unknown user PTE bits.
     *   Added syscall observability counters and periodic diagnostics (`fault`, `invalid`, `perm`, map/unmap failure reasons, TLB flush count).
     *   Added userland strict wrappers in `user/lib/reaper.c` and `user/include/reaper.h`:
-        *   `sys_map_strict(...)`
-        *   `sys_unmap_strict(...)`
+        *   `sys_map_strict(...)` (historical Day 27 wrapper; removed in Day 72 when strict path became default `sys_map(...)`)
+        *   `sys_unmap_strict(...)` (historical Day 27 wrapper; removed in Day 72 when strict path became default `sys_unmap(...)`)
 *   **Why it was changed:**
     *   To reduce kernel fault risk at the user-kernel boundary before further feature expansion.
     *   To introduce Law 2 hardening as an incremental rollout rather than a destabilizing all-at-once cutover.
@@ -388,7 +388,7 @@
 
 ### Epoch II, Day 28: Law 2 Strict Adoption Pass (Paradigm Migration)
 *   **What was changed:**
-    *   Migrated Paradigm Shadow Mapping path in `user/paradigm/main.c` from legacy `sys_map(...)` calls to `sys_map_strict(...)`.
+    *   Migrated Paradigm Shadow Mapping path in `user/paradigm/main.c` from legacy `sys_map(...)` calls to `sys_map_strict(...)` (historical Day 28 wrapper; removed in Day 72 when strict path became default `sys_map(...)`).
     *   Added explicit strict negative-path probes before the mapping chain:
         *   invalid index rejection in strict mode
         *   unknown flag-bit rejection
@@ -406,7 +406,7 @@
 
 ### Epoch II, Day 29: Law 2 Runtime Validation + Strict Unmap Adoption
 *   **What was changed:**
-    *   Migrated Paradigm boundary probe from legacy `sys_unmap(...)` to `sys_unmap_strict(...)` for strict API coverage.
+    *   Migrated Paradigm boundary probe from legacy `sys_unmap(...)` to `sys_unmap_strict(...)` for strict API coverage (historical Day 29 wrapper; removed in Day 72 when strict path became default `sys_unmap(...)`).
     *   Executed headless QEMU validation (`-nographic`) to verify runtime behavior in this environment.
 *   **Why it was changed:**
     *   To complete strict map/unmap usage in Paradigm's active path.
@@ -907,6 +907,19 @@
         *   `[TEST] SMP atomic budget integrity`
         *   `[TEST] ESAK IPI profile: BSP_ONLY`
 
+### Epoch III, Day 55: Day 11 Void Gate Redesign Closure
+* **What was changed:**
+    * Implemented 4-stage Entry Pipeline (Compile/Verify/Apply/Attest) in `kernel/entry.c`.
+    * Redacted `SYS_MODE_QUERY` for non-privileged processes (occupant isolation).
+    * Enforced epoch-aware lease verification in `kernel/scheduler.c`.
+    * Added deterministic Entry Pipeline markers and rejection markers.
+    * Added artifact: `docs/reports/day55_final_report.md`.
+* **Why it was changed:**
+    * To ensure absolute occupant isolation and fail-closed reality shifts.
+* **Test Results:**
+    * [PASS] `make -C kernel verify_matrix` (3/3)
+    * [PASS] Matrix serial confirms `[ENTRY_*]` pipeline markers.
+
 ### Epoch III, Day 56: Day 12 Closure Ratification
 *   **What was changed:**
     *   Added deterministic Day 12 closure markers in kernel boot self-tests:
@@ -916,8 +929,7 @@
         *   `[TEST] Day 12 Process Annihilation: SUCCESS.`
     *   Added Day 12 marker gates to matrix harness:
         *   `tools/run_law2_fate_matrix.sh`
-    *   Added Day 12 closure contract artifact:
-        *   `docs/components/day12/day12_closure_contract.md`
+    *   Added artifact: `docs/reports/day56_closure_report.md`
 *   **Why it was changed:**
     *   To convert Day 12 from narrative completion into enforceable runtime closure criteria.
     *   To align Day 12 evidence with Vision/Security/Performance governance used by current Epoch III closure slices.
@@ -1327,3 +1339,309 @@
     *   [PASS] `make -C kernel iso`
     *   [PASS] `make -C kernel verify_matrix` (3/3)
     *   [PASS] `./tools/run_day27_closure_suite.sh --runs 5 --timeout 35 --iso kernel/reaper-os.iso --out-dir kernel` (5/5)
+
+### Epoch III, Day 72: Law 2 Closure Hardening (Kernel Attestation + Strict-Only Cutover)
+*   **What was changed:**
+    *   Added kernel-owned Law 2 attestation gate op and payload:
+        *   `GATE_OP_LAW2_ATTEST`
+        *   `gate_law2_attest_t`
+    *   Added Fate attestation record/filter support:
+        *   `FATE_RECORD_ATTEST`
+        *   `FATE_READ_ATTEST`
+        *   `mode_log_law2_attestation(...)`
+    *   Hardened map/unmap strict semantics from tolerated-marker to strict-only control:
+        *   `SYS_MAP` now requires `a4 == 1`
+        *   `SYS_UNMAP` now requires `a2 == 1`
+    *   Removed legacy strict-wrapper ambiguity in user API:
+        *   removed `sys_map_strict(...)`, `sys_unmap_strict(...)`
+        *   retained strict-only `sys_map(...)`, `sys_unmap(...)`
+    *   Integrated kernel attestation call in Paradigm runtime flow:
+        *   `sys_law2_attest(...)` executed before lattice probes
+    *   Extended matrix and Day 28/29/30 closure suites to require kernel attestation PASS markers and reject attestation FAIL markers.
+    *   Updated conformance + closure contracts + syscall contracts/testing strategy to make kernel attestation authoritative for Day 28/29/30 closure.
+*   **Why it was changed:**
+    *   To remove marker-only trust for Day 28/29/30 closure and shift to kernel-owned evidence.
+    *   To eliminate strict/legacy ambiguity and finalize strict-only mapping API behavior.
+*   **Test Results:**
+    *   [PASS] `make -C user`
+    *   [PASS] `make -C kernel`
+    *   [PASS] `make -C kernel verify_matrix` (3/3)
+    *   [PASS] `make -C kernel verify_day28`
+    *   [PASS] `make -C kernel verify_day29`
+    *   [PASS] `make -C kernel verify_day30`
+
+### Epoch III, Day 73: Day 29 Enhancement Ratification (Reason-Coded Attestation + Performance Gate)
+*   **What was changed:**
+    *   Extended Day 29 kernel attestation payload and diagnostics with:
+        *   reason coverage mask (`day29_reason_mask`)
+        *   strict-unmap latency metrics (`day29_unmap_cycles_max`, `day29_unmap_cycles_avg`)
+        *   explicit Day 29 performance budget (`day29_perf_budget_cycles`)
+    *   Added strict-unmap reject/success counters in syscall metrics:
+        *   control-word reject
+        *   parent-type reject
+        *   write-rights reject
+        *   out-of-range index reject
+        *   strict-unmap success count
+    *   Hardened strict-unmap path to collect reason-coded evidence and latency budget data in kernel-owned attestation.
+    *   Added explicit Day 29 reject-class probes in Paradigm:
+        *   strict control word reject
+        *   non-pagetable parent reject
+        *   write-rights reject
+        *   out-of-range index reject
+    *   Added Day 29 closure markers:
+        *   `[TEST] Day 29 Reason Coverage Contract: SUCCESS.`
+        *   `[TEST] Day 29 Performance Budget Contract: SUCCESS.`
+    *   Upgraded matrix and Day 29 closure suite gates to require the new Day 29 markers.
+*   **Why it was changed:**
+    *   To make Day 29 closure evidence reason-complete and kernel-authoritative rather than relying only on coarse pass/fail markers.
+    *   To convert strict-unmap latency expectations into release-blocking performance evidence.
+*   **Test Results:**
+    *   [PASS] `make -C user`
+    *   [PASS] `make -C kernel`
+    *   [PASS] `make -C kernel verify_day29` (3/3)
+    *   [PASS] `./tools/run_day29_closure_suite.sh --runs 5 --timeout 35 --iso kernel/reaper-os.iso --out-dir kernel` (5/5)
+
+### Epoch III, Day 74: Day 30 Enhancement Ratification (Reason-Coverage + Scan-Budget Gate)
+*   **What was changed:**
+    *   Extended Day 30 kernel attestation payload and diagnostics with:
+        *   reject-reason coverage mask (`day30_reason_mask`)
+        *   attestation scan latency evidence (`day30_reject_scan_cycles`)
+        *   explicit Day 30 scan budget (`day30_perf_budget_cycles`)
+    *   Hardened Day 30 attestation evaluation to require:
+        *   reject-with-reason evidence
+        *   required reason-class mask coverage (`EDGE_ILLEGAL`, `AUTH_REQUIRED`, `SPECIAL_KEY_REQUIRED`)
+        *   scan-latency budget pass
+    *   Added deterministic Day 30 reject-reason probes in Paradigm to guarantee coverage of required reason classes.
+    *   Added Day 30 closure markers:
+        *   `[TEST] Day 30 Reason Coverage Contract: SUCCESS.`
+        *   `[TEST] Day 30 Performance Budget Contract: SUCCESS.`
+    *   Upgraded matrix and Day 30 closure suite gates to require new Day 30 markers.
+*   **Why it was changed:**
+    *   To make Day 30 closure evidence reason-complete and kernel-authoritative.
+    *   To convert Day 30 attestation scan cost into a release-blocking performance contract.
+*   **Test Results:**
+    *   [PASS] `make -C user`
+    *   [PASS] `make -C kernel`
+    *   [PASS] `make -C kernel verify_day30` (3/3)
+    *   [PASS] `./tools/run_day30_closure_suite.sh --runs 5 --timeout 35 --iso kernel/reaper-os.iso --out-dir kernel` (5/5)
+
+### Epoch III, Day 75: Day 31 Enhancement Ratification (Deterministic Revalidation + Drift Gate)
+*   **What was changed:**
+    *   Added deterministic Day 31 revalidation markers in Paradigm:
+        *   `[TEST] Day 31 Revalidation Security Contract: SUCCESS.`
+        *   `[TEST] Day 31 Revalidation Determinism Contract: SUCCESS.`
+        *   `[TEST] Day 31 Revalidation Performance Contract: SUCCESS.`
+    *   Added explicit Day 31 fail-marker path:
+        *   `[DAY31-FAIL]`
+    *   Implemented double-attestation revalidation logic in Paradigm:
+        *   consecutive `GATE_OP_LAW2_ATTEST` snapshots are compared for status/reason-mask parity
+        *   Day 29/30 budget compliance is rechecked per snapshot
+        *   inter-snapshot Day 29/30 metric drift is bounded by Day 31 drift budgets
+    *   Added Day 31 repeat-run closure suite:
+        *   `tools/run_day31_closure_suite.sh`
+    *   Added kernel convenience gate:
+        *   `make -C kernel verify_day31`
+    *   Extended matrix required/forbidden markers and synchronized closure docs:
+        *   `tools/run_law2_fate_matrix.sh`
+        *   `docs/components/day31/day31_closure_contract.md`
+        *   conformance/syscall testing strategy and versioning artifacts
+*   **Why it was changed:**
+    *   To convert Day 31 from a historical one-off revalidation note into a release-blocking deterministic closure contract.
+    *   To enforce both security parity and performance stability across immediate attestation snapshots.
+*   **Test Results:**
+    *   [PASS] `make -C user`
+    *   [PASS] `make -C kernel`
+    *   [PASS] `make -C kernel verify_day31` (3/3)
+    *   [PASS] `./tools/run_day31_closure_suite.sh --runs 5 --timeout 35 --iso kernel/reaper-os.iso --out-dir kernel` (5/5)
+    *   [PASS] `make -C kernel verify_matrix` (3/3)
+
+### Epoch III, Day 76: Day 32 Enhancement Ratification (Fault-Filter Integrity + Read-Budget Gate)
+*   **What was changed:**
+    *   Added deterministic Day 32 runtime markers in Paradigm:
+        *   `[TEST] Day 32 Fault Filter Contract: SUCCESS.`
+        *   `[TEST] Day 32 Fault Metadata Contract: SUCCESS.`
+        *   `[TEST] Day 32 Fault Read Performance Contract: SUCCESS.`
+    *   Added explicit Day 32 fail-marker path:
+        *   `[DAY32-FAIL]`
+    *   Implemented Day 32 closure probes in Paradigm for:
+        *   `FATE_READ_*` mode isolation across transition/fault/lattice/attest views
+        *   #GP/#PF forensic metadata completeness checks from fault records
+        *   bounded fault-read runtime budget (`DAY32_FAULT_READ_BUDGET_CYCLES`)
+    *   Added Day 32 repeat-run closure suite:
+        *   `tools/run_day32_closure_suite.sh`
+    *   Added kernel convenience gate:
+        *   `make -C kernel verify_day32`
+    *   Extended matrix required/forbidden marker gates and synchronized closure docs.
+*   **Why it was changed:**
+    *   To convert Day 32 from historical integration evidence into release-blocking deterministic closure gates.
+    *   To make fault forensics filter correctness and read-path runtime budget explicitly enforceable.
+*   **Test Results:**
+    *   [PASS] `make -C user`
+    *   [PASS] `make -C kernel`
+    *   [PASS] `make -C kernel verify_day32` (3/3)
+    *   [PASS] `./tools/run_day32_closure_suite.sh --runs 5 --timeout 35 --iso kernel/reaper-os.iso --out-dir kernel` (5/5)
+    *   [PASS] `make -C kernel verify_matrix` (3/3)
+
+### Epoch III, Day 77: Day 33 Enhancement Ratification (Full-Context Integrity + Audit-Budget Gate)
+*   **What was changed:**
+    *   Added deterministic Day 33 runtime markers in Paradigm:
+        *   `[TEST] Day 33 Full Context Coverage Contract: SUCCESS.`
+        *   `[TEST] Day 33 Fault Vector Coverage Contract: SUCCESS.`
+        *   `[TEST] Day 33 Full Context Performance Contract: SUCCESS.`
+    *   Added explicit Day 33 fail-marker path:
+        *   `[DAY33-FAIL]`
+    *   Implemented Day 33 closure probes in Paradigm for:
+        *   full-context integrity checks across sampled fault records
+        *   sampled fault-vector/type sanity checks for closure audit windows
+        *   bounded full-context audit runtime budget (`DAY33_FULL_CONTEXT_AUDIT_BUDGET_CYCLES`)
+    *   Added Day 33 repeat-run closure suite:
+        *   `tools/run_day33_closure_suite.sh`
+    *   Added kernel convenience gate:
+        *   `make -C kernel verify_day33`
+    *   Extended matrix required/forbidden marker gates and synchronized closure docs.
+*   **Why it was changed:**
+    *   To convert Day 33 from historical context-expansion evidence into release-blocking deterministic closure gates.
+    *   To guarantee that full fault context remains complete, type-safe, and budget-bounded under repeated runtime validation.
+*   **Test Results:**
+    *   [PASS] `make -C user`
+    *   [PASS] `make -C kernel`
+    *   [PASS] `make -C kernel verify_day33` (3/3)
+    *   [PASS] `./tools/run_day33_closure_suite.sh --runs 5 --timeout 35 --iso kernel/reaper-os.iso --out-dir kernel` (5/5)
+    *   [PASS] `make -C kernel verify_matrix` (3/3)
+
+### Epoch III, Day 78: Day 34 Enhancement Ratification (Real-Path Provenance + Audit-Budget Gate)
+*   **What was changed:**
+    *   Added deterministic Day 34 runtime markers in Paradigm:
+        *   `[TEST] Day 34 Real Fault Path Contract: SUCCESS.`
+        *   `[TEST] Day 34 User Fault Provenance Contract: SUCCESS.`
+        *   `[TEST] Day 34 Real Fault Performance Contract: SUCCESS.`
+    *   Added explicit Day 34 fail-marker path:
+        *   `[DAY34-FAIL]`
+    *   Implemented Day 34 closure probes in Paradigm for:
+        *   real-path lattice first-touch `#PF` evidence in Fate fault windows
+        *   sampled real-fault user provenance and context-integrity checks
+        *   bounded real-fault audit runtime budget (`DAY34_REAL_FAULT_AUDIT_BUDGET_CYCLES`)
+    *   Added Day 34 repeat-run closure suite:
+        *   `tools/run_day34_closure_suite.sh`
+    *   Added kernel convenience gate:
+        *   `make -C kernel verify_day34`
+    *   Extended matrix required/forbidden marker gates and synchronized closure docs.
+*   **Why it was changed:**
+    *   To convert Day 34 from historical real-path validation evidence into release-blocking deterministic closure gates.
+    *   To guarantee real-fault provenance and bounded audit cost under repeated runtime verification.
+*   **Test Results:**
+    *   [PASS] `make -C user`
+    *   [PASS] `make -C kernel`
+    *   [PASS] `make -C kernel verify_day34` (3/3)
+    *   [PASS] `./tools/run_day34_closure_suite.sh --runs 5 --timeout 35 --iso kernel/reaper-os.iso --out-dir kernel` (5/5)
+    *   [PASS] `make -C kernel verify_matrix` (3/3)
+
+### Epoch III, Day 80: Fate Strings & Audit Pipeline Redesign Closure
+*   **What was changed:**
+    *   **Audit Subsystem Foundation**: 
+        *   Implemented `kernel/audit.c` with a 128-byte, 1024-slot ring buffer.
+        *   Integrated `stdatomic.h` for SMP-safe head/tail management with Acquire/Release semantics.
+    *   **Cryptographic Chaining**:
+        *   Migrated the audit chain to vendored **BLAKE3**.
+        *   Implemented **Reality-Bound Seeding**: The chain is re-keyed on every Phase Shift using `BLAKE3(Root_Seed | Reality_ID | Epoch)`.
+    *   **Instrumentation Matrix**:
+        *   `THREAD_CREATE/DESTROY`: Track lifecycle entries/exits.
+        *   `PHASE_SHIFT`: Record every Reality transition and its authority context.
+        *   `CAP_DENIED/MINT`: Log both policy rejections and the creation of new authority.
+        *   `SCHED_STALL`: Integrated starvation detection directly into the audit trail.
+    *   **Overflow & Integrity**:
+        *   Implemented an explicit `AUDIT_EVENT_OVERFLOW` announcement record.
+        *   Introduced `gap_seq` tracking to quantify dropped records while maintaining chain integrity.
+    *   **Security Documentation**:
+        *   Documented sealed-storage seed hardening as the remaining Ghost-mode follow-up.
+*   **Why it was changed:**
+    *   To fulfill the "Fatal Forensics" mandate with a cryptographically bound, immutable audit trail.
+    *   To provide Sentinel and Paradigm with the evidence required to build a verifiable provenance tree of system state.
+*   **Test Results:**
+    *   [PASS] `static_assert(sizeof(audit_record_t) == 128)` verified.
+    *   [PASS] Seed rotation verified during `VOID -> CASUAL` and `CASUAL -> SECURE` transitions.
+    *   [PASS] Overflow logic verified: `AUDIT_EVENT_OVERFLOW` correctly consumes a reserved slot and increments `gap_seq` for the next record.
+
+### Epoch III, Day 84: ACPI Layer 1/2 Foundation Closure
+*   **What was changed:**
+    *   Added a boot-valid `acpi_init()` path and removed the earlier ACPI panic stub.
+    *   Kept Limine RSDP discovery as the firmware handoff path and validated RSDP/root-SDT checksums.
+    *   Implemented `acpi_find_table(const char *signature)` as the stable public ACPI lookup interface.
+    *   Added static parsing for MADT, FADT, HPET, MCFG, and DMAR.
+    *   Wired `acpi_self_test()` into the boot sequence.
+*   **Why it was changed:**
+    *   To establish the firmware-table substrate required for later IOMMU, PCIe, timer, and CPU-topology work.
+    *   To keep ACPI table parsing centralized and self-contained rather than duplicating raw table walks in downstream subsystems.
+*   **Test Results:**
+    *   [PASS] `make -C kernel`
+    *   [PASS] `make -C kernel run`
+    *   [PASS] Serial markers:
+        *   `[ACPI] RSDP found at 0xffff8000000f5290`
+        *   `[ACPI] Found APIC at 0x1ffe1b7a`
+        *   `[TEST] ACPI Layer 1+2: SUCCESS.`
+
+### Epoch III, Day 85: Architecture and Documentation Synchronization
+*   **What was changed:**
+    *   Updated the main architecture document to reflect the newer daemon model from `docs/details.txt`:
+        *   Genesis as bootstrapper
+        *   Paradigm as ongoing Reality/Security authority
+        *   Sentinel as a semi-independent subsystem inside Paradigm
+        *   Sage, Archive, Tunnel, Veil, and Nexus with updated roles
+    *   Corrected audit design docs to describe the current BLAKE3 implementation.
+    *   Corrected Day 84 reporting/status artifacts so they no longer overclaim full memory-hardening completion.
+    *   Added synchronized roadmap/report/version entries for the Day 83-85 state.
+*   **Why it was changed:**
+    *   To eliminate contradictions between the codebase, the roadmap, and the architectural narrative.
+    *   To preserve traceability now that the implementation and the design have both moved beyond the older daemon roster and placeholder audit design.
+*   **Test Results:**
+    *   [PASS] `make -C kernel clean && make -C kernel`
+    *   [PASS] `make -C kernel run`
+    *   [PASS] Serial markers:
+        *   `[TEST] ACPI Layer 1+2: SUCCESS.`
+        *   `[TEST] Day 80 Audit Foundation Contract: SUCCESS.`
+
+### Epoch III, Day 86: DMA Authority Contract + DMAR Truth Freeze
+*   **What was changed:**
+    *   Added an explicit kernel-owned `iommu_inventory_t` with:
+        *   inventory state enum
+        *   degraded-reason enum
+        *   bounded DRHD unit inventory
+        *   bounded device-scope inventory
+    *   Made ACPI's DMAR parse the only firmware source of truth for IOMMU inventory via:
+        *   `acpi_get_dmar_info(...)`
+    *   Implemented `iommu_init()` to:
+        *   classify missing DMAR as explicit unavailable state
+        *   reject invalid or ambiguous topology as degraded state
+        *   accept valid DMAR topology as inventoried state
+    *   Added `iommu_self_test()` to validate inventory/degraded policy behavior.
+    *   Added audit event types for:
+        *   IOMMU inventory
+        *   degraded state
+        *   unit discovery
+        *   topology rejection
+    *   Added Day 86 design/report/checklist/version artifacts.
+*   **Why it was changed:**
+    *   To freeze DMA authority semantics before enabling VT-d hardware paths.
+    *   To ensure hardware isolation work remains explicit, auditable, and fail-closed rather than drifting into implicit policy.
+*   **Test Results:**
+    *   [PASS] `make -C kernel clean && make -C kernel`
+    *   [PASS] `make -C kernel run`
+    *   [PASS] Serial markers:
+        *   explicit `[IOMMU] State: ...`
+        *   `[TEST] IOMMU Inventory Contract: SUCCESS.`
+        *   `[TEST] IOMMU Degraded Policy Contract: SUCCESS.`
+
+### Epoch III, Day 87: Paradigm Stack Baseline Closure
+*   **What was changed:**
+    *   Read `kernel/serial.log` and confirmed the early Paradigm bootstrap user fault at `0x7ffdd0` below the fixed entry stack top `0x800000`.
+    *   Expanded the Genesis-mapped Paradigm user stack in `kernel/genesis.c` from one page to eight pages beneath the fixed entry RSP.
+    *   Synchronized report/roadmap/version status documents so the post-fix baseline is explicitly recorded for later daemon work.
+*   **Why it was changed:**
+    *   To remove the immediate userspace bootstrap fault before starting core-daemon implementation work.
+    *   To re-freeze runtime confidence on the exact baseline that will be referenced by later daemon reports.
+*   **Test Results:**
+    *   [PASS] `make -C kernel`
+    *   [PASS] `make -C kernel verify_matrix` (3/3)
+    *   [PASS] `make -C kernel verify_matrix` (3/3)
+    *   [PASS] `make -C kernel verify_matrix` (3/3)
+    *   [PASS] Headless serial log no longer shows the prior `0x7ffdd0` Paradigm bootstrap fault and reaches normal Paradigm runtime markers.

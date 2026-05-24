@@ -38,8 +38,8 @@ Day 27 focused on reducing kernel risk at the user-kernel boundary while opening
 
 ### E. Userland Staging APIs
 - Added wrappers:
-  - `sys_map_strict(...)`
-  - `sys_unmap_strict(...)`
+  - `sys_map_strict(...)` (historical Day 27 wrapper; removed in Day 72 when strict path became default `sys_map(...)`)
+  - `sys_unmap_strict(...)` (historical Day 27 wrapper; removed in Day 72 when strict path became default `sys_unmap(...)`)
 - Enables incremental migration of user-space mapping paths to strict mode.
 
 ## 3. Verification Results

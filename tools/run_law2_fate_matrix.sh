@@ -103,9 +103,25 @@ required_markers=(
     "[TEST] Day 29 Strict Unmap Adoption Contract: SUCCESS."
     "[TEST] Day 29 Runtime Validation Contract: SUCCESS."
     "[TEST] Day 29 Strict Path Runtime Contract: SUCCESS."
+    "[TEST] Day 29 Reason Coverage Contract: SUCCESS."
+    "[TEST] Day 29 Performance Budget Contract: SUCCESS."
     "[TEST] Day 30 Rejection Auditing Contract: SUCCESS."
     "[TEST] Day 30 Fate Result-Code Contract: SUCCESS."
     "[TEST] Day 30 Rejected Evidence Contract: SUCCESS."
+    "[TEST] Day 30 Reason Coverage Contract: SUCCESS."
+    "[TEST] Day 30 Performance Budget Contract: SUCCESS."
+    "[TEST] Day 31 Revalidation Security Contract: SUCCESS."
+    "[TEST] Day 31 Revalidation Determinism Contract: SUCCESS."
+    "[TEST] Day 31 Revalidation Performance Contract: SUCCESS."
+    "[TEST] Day 32 Fault Filter Contract: SUCCESS."
+    "[TEST] Day 32 Fault Metadata Contract: SUCCESS."
+    "[TEST] Day 32 Fault Read Performance Contract: SUCCESS."
+    "[TEST] Day 33 Full Context Coverage Contract: SUCCESS."
+    "[TEST] Day 33 Fault Vector Coverage Contract: SUCCESS."
+    "[TEST] Day 33 Full Context Performance Contract: SUCCESS."
+    "[TEST] Day 34 Real Fault Path Contract: SUCCESS."
+    "[TEST] Day 34 User Fault Provenance Contract: SUCCESS."
+    "[TEST] Day 34 Real Fault Performance Contract: SUCCESS."
     "[TEST] Syscall Gate ABI v2: SUCCESS."
     "[TEST] Syscall Gate validation invariants: SUCCESS."
     "[TEST] Syscall Gate security probes: SUCCESS."
@@ -156,6 +172,10 @@ forbidden_markers=(
     "[DAY28-FAIL]"
     "[DAY29-FAIL]"
     "[DAY30-FAIL]"
+    "[DAY31-FAIL]"
+    "[DAY32-FAIL]"
+    "[DAY33-FAIL]"
+    "[DAY34-FAIL]"
 )
 
 echo "[matrix] runs=${RUNS} timeout=${TIMEOUT_SECS}s iso=${ISO_PATH}"
@@ -187,9 +207,29 @@ for ((i = 1; i <= RUNS; i++)); do
         fi
     done
 
+    for marker_regex in \
+        '^\[LAW2_ATTEST\] day=28 result=PASS' \
+        '^\[LAW2_ATTEST\] day=29 result=PASS' \
+        '^\[LAW2_ATTEST\] day=30 result=PASS'; do
+        if ! grep -Eq "${marker_regex}" "${serial_file}"; then
+            echo "ERROR: run ${i} missing required kernel attestation marker: ${marker_regex}" >&2
+            exit 1
+        fi
+    done
+
     for marker in "${forbidden_markers[@]}"; do
         if grep -Fq "${marker}" "${serial_file}"; then
             echo "ERROR: run ${i} contains forbidden marker: ${marker}" >&2
+            exit 1
+        fi
+    done
+
+    for marker_regex in \
+        '^\[LAW2_ATTEST\] day=28 result=FAIL' \
+        '^\[LAW2_ATTEST\] day=29 result=FAIL' \
+        '^\[LAW2_ATTEST\] day=30 result=FAIL'; do
+        if grep -Eq "${marker_regex}" "${serial_file}"; then
+            echo "ERROR: run ${i} contains forbidden kernel attestation marker: ${marker_regex}" >&2
             exit 1
         fi
     done

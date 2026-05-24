@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "../../shared/include/syscall.h"
+#include "capability.h"
+
+uint64_t ipc_invoke_endpoint(cap_identity_t* ident, uint64_t a0, uint64_t a1, uint64_t a2, uint64_t options);
 
 /*
  * REAPER-OS SYSCALL ABI (THE VOID GATE)
@@ -42,6 +45,13 @@ typedef struct {
     uint64_t map_fail_flags;
     uint64_t unmap_calls;
     uint64_t unmap_strict_calls;
+    uint64_t unmap_success_calls;
+    uint64_t unmap_fail_ctrl;
+    uint64_t unmap_fail_parent;
+    uint64_t unmap_fail_rights;
+    uint64_t unmap_fail_index;
+    uint64_t unmap_strict_cycles_total;
+    uint64_t unmap_strict_cycles_max;
     uint64_t tlb_flushes;
 } syscall_metrics_t;
 

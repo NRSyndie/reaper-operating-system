@@ -24,6 +24,7 @@ Use this checklist for every implementation day before declaring completion.
 - [ ] Added/updated day status row in `docs/development_log/TODO.rst`.
 - [ ] Updated `Current Phase` in `docs/development_log/TODO.rst`.
 - [ ] Updated strategic notes in `docs/development_log/epoch_two_plan.md` and/or `docs/development_log/epoch_three_plan.md` when scope/status changed.
+- [ ] Updated architecture docs when project-structure or daemon-responsibility decisions changed (`docs/project_vision_and_architecture.md` and related design docs).
 
 ## 4. Version Log Entry
 - [ ] Added new version row in `docs/development_log/versions.rst`.
@@ -212,3 +213,22 @@ Use this checklist for every implementation day before declaring completion.
 - [ ] Forbidden marker `[DAY27-FAIL]` absent from matrix serial logs.
 - [ ] Repeat-run closure gate passes: `./tools/run_day27_closure_suite.sh`.
 - [ ] Vision/Security/Performance review artifacts captured in day closure report.
+
+## 25. Final Redesign One-Way Gate
+- [ ] Product contract reviewed: `docs/components/final_product/reaper_product_contract_v1.md`.
+- [ ] Strategy reviewed: `docs/development_log/final_redesign_strategy.md`.
+- [ ] Checklist reviewed: `docs/development_log/final_redesign_checklist.md`.
+- [ ] Baseline matrix determinism gate passes: `make -C kernel verify_matrix`.
+- [ ] Security-critical closure suites pass (Day 28-34).
+- [ ] Final gate command passes: `make -C kernel verify_final_gate`.
+- [ ] Release lock command passes: `make -C kernel verify_final_release`.
+- [ ] Required markers present and forbidden markers absent across all lock runs.
+- [ ] Final docs synchronized in reports/roadmap/version entries.
+
+## 26. Day 79 Slot 1 Step 3 Evidence Sync
+- [x] Runtime marker `[TEST] Slot 1 RWLock primitive: SUCCESS.` present.
+- [x] Runtime marker `[TEST] Slot 1 SeqLock primitive: SUCCESS.` present.
+- [x] Runtime marker `[TEST] Slot 1 RCU baseline primitive: SUCCESS.` present.
+- [x] Forbidden marker `[SLOT1-FAIL]` absent from matrix serial logs.
+- [x] `docs/reports/day79_final_report.md` added and synchronized.
+- [x] `docs/development_log/day79_checklist.md` added and synchronized.

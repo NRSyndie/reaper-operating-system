@@ -1,4 +1,4 @@
-# Day 32 Final Report: Fault-to-String Integration (Vectors 13/14)
+# Epoch III, Day 76: Day 32 Enhancement Ratification (Fault-Filter Integrity + Read-Budget Gate)
 
 ## 1. Overview
 Day 32 integrated exception forensics into Fate Strings by recording fault events as first-class ledger records.
@@ -40,3 +40,17 @@ Day 32 integrated exception forensics into Fate Strings by recording fault event
 ## 4. Status Impact
 - Fault handling now contributes durable, queryable forensic records.
 - User-space auditors can explicitly query fault-only Fate windows.
+
+## 5. Enhancement Ratification (Epoch III, Day 76)
+- Day 32 was promoted to closure-grade enforcement with deterministic runtime gates:
+  - `[TEST] Day 32 Fault Filter Contract: SUCCESS.`
+  - `[TEST] Day 32 Fault Metadata Contract: SUCCESS.`
+  - `[TEST] Day 32 Fault Read Performance Contract: SUCCESS.`
+- Day 32 closure now enforces:
+  - read-mode filter isolation across transition/fault/lattice/attest classes
+  - required #GP/#PF fault metadata integrity in user-visible forensic records
+  - bounded fault-read runtime budget with explicit `[DAY32-FAIL]` fail path
+- Closure artifacts added:
+  - `docs/components/day32/day32_closure_contract.md`
+  - `tools/run_day32_closure_suite.sh`
+  - `make -C kernel verify_day32`

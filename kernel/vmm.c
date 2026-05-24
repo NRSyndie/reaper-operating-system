@@ -50,7 +50,7 @@ static pt_entry_t* get_next_level(pt_entry_t* current, uint64_t index, process_t
     pt_entry_t* virt = phys_to_virt(new_table_phys);
     fast_zero(virt, PAGE_SIZE);
 
-    current[index] = new_table_phys | VMM_PRESENT | VMM_WRITABLE | VMM_USER;
+    current[index] = new_table_phys | VMM_PRESENT | VMM_WRITABLE | (proc ? VMM_USER : 0);
 
     return virt;
 }
@@ -67,13 +67,19 @@ static bool vmm_walk_leaf_noalloc(pt_entry_t* pml4, uint64_t virt, pt_entry_t** 
     uint64_t pd_idx   = (virt >> 21) & 0x1FF;
     uint64_t pt_idx   = (virt >> 12) & 0x1FF;
 
-    if (!(pml4[pml4_idx] & VMM_PRESENT) || (pml4[pml4_idx] & VMM_HUGE)) return false;
+    if (!(pml4[pml4_idx] & VMM_PRESENT)) return false;
     pt_entry_t* pdpt = phys_to_virt(pml4[pml4_idx] & ~0xFFFULL);
-    if (!(pdpt[pdpt_idx] & VMM_PRESENT) || (pdpt[pdpt_idx] & VMM_HUGE)) return false;
+    if (!(pdpt[pdpt_idx] & VMM_PRESENT)) return false;
     pt_entry_t* pd = phys_to_virt(pdpt[pdpt_idx] & ~0xFFFULL);
-    if (!(pd[pd_idx] & VMM_PRESENT) || (pd[pd_idx] & VMM_HUGE)) return false;
-    pt_entry_t* pt = phys_to_virt(pd[pd_idx] & ~0xFFFULL);
+    if (!(pd[pd_idx] & VMM_PRESENT)) return false;
 
+    if (pd[pd_idx] & VMM_HUGE) {
+        *out_pt = pd;
+        *out_pt_idx = pd_idx;
+        return true;
+    }
+
+    pt_entry_t* pt = phys_to_virt(pd[pd_idx] & ~0xFFFULL);
     *out_pt = pt;
     *out_pt_idx = pt_idx;
     return true;
@@ -85,7 +91,7 @@ static bool vmm_unmap_leaf_noalloc(pt_entry_t* pml4, uint64_t virt) {
     if (!vmm_walk_leaf_noalloc(pml4, virt, &pt, &pt_idx)) return false;
     if (!(pt[pt_idx] & VMM_PRESENT)) return false;
     pt[pt_idx] = 0;
-    __asm__ volatile ("invlpg (%0)" : : "r"(virt) : "memory");
+    (void)cpu_tlb_shootdown_page(virt);
     return true;
 }
 
@@ -100,7 +106,9 @@ static void vmm_contract_log_push(const vmm_region_contract_t* contract) {
 
 static bool vmm_map_raw(process_t* proc, uint64_t virt, uint64_t phys, uint64_t flags) {
     GASSERT_HARD(virt % PAGE_SIZE == 0, "Virtual address must be page-aligned");
-    GASSERT_HARD(phys % PAGE_SIZE == 0, "Physical address must be page-aligned");
+    if (!(flags & VMM_DEMAND)) {
+        GASSERT_HARD(phys % PAGE_SIZE == 0, "Physical address must be page-aligned");
+    }
 
     pt_entry_t* pml4 = kernel_pml4;
     if (proc) pml4 = phys_to_virt(proc->pml4_phys);
@@ -117,11 +125,28 @@ static bool vmm_map_raw(process_t* proc, uint64_t virt, uint64_t phys, uint64_t 
     pt_entry_t* pd = get_next_level(pdpt, pdpt_idx, proc);
     if (!pd) return false;
 
+    if (flags & VMM_HUGE) {
+        /* Ensure we only pass relevant bits to the PDE huge page entry */
+        /* Only keep VMM_HUGE, VMM_PRESENT, VMM_WRITABLE, VMM_USER, VMM_NX, VMM_ACCESSED, VMM_DIRTY */
+        uint64_t pde_flags = flags & (VMM_HUGE | VMM_PRESENT | VMM_WRITABLE | VMM_USER | VMM_NX | VMM_ACCESSED | VMM_DIRTY);
+        pd[pd_idx] = (phys & ~0x1FFFFFULL) | pde_flags;
+        klog_debug("VMM_MAP_RAW: vaddr=0x%lx pde=0x%lx flags=0x%lx\n", 
+           virt, pd[pd_idx], flags);
+        return true;
+    }
+
     pt_entry_t* pt = get_next_level(pd, pd_idx, proc);
     if (!pt) return false;
 
     /* Phase 2: Set the leaf */
-    pt[pt_idx] = (phys & ~0xFFFULL) | flags | VMM_PRESENT;
+    if (flags & VMM_DEMAND) {
+        /* Only store software-meaningful bits in the demand placeholder */
+        pt[pt_idx] = flags & (VMM_DEMAND | VMM_COW | VMM_USER | VMM_WRITABLE);
+    } else {
+        /* Ensure we only pass relevant bits to the PTE entry */
+        uint64_t pte_flags = flags & (VMM_PRESENT | VMM_WRITABLE | VMM_USER | VMM_NX | VMM_ACCESSED | VMM_DIRTY | VMM_COW | VMM_DEMAND);
+        pt[pt_idx] = (phys & ~0xFFFULL) | pte_flags;
+    }
     return true;
 }
 
@@ -171,9 +196,30 @@ bool vmm_compile_region_contract(const vmm_region_contract_t* contract, vmm_comp
         if (max_phys < contract->phys_start) {
             return vmm_contract_fail(compiled, VMM_CONTRACT_RESULT_ERR_OVERFLOW);
         }
-        if (contract->pte_flags & VMM_HUGE) {
-            return vmm_contract_fail(compiled, VMM_CONTRACT_RESULT_ERR_FLAGS);
+
+        /* Demand paging: Allow phys_start=0 if VMM_DEMAND is set */
+        if (contract->phys_start == 0 && !(contract->pte_flags & VMM_DEMAND)) {
+             // Normal map needs physical address
+             // return vmm_contract_fail(compiled, VMM_CONTRACT_RESULT_ERR_FLAGS);
         }
+
+        if (contract->pte_flags & VMM_DEMAND) {
+            if (contract->pte_flags & (VMM_PRESENT | VMM_NX | VMM_ACCESSED | VMM_DIRTY)) {
+                return vmm_contract_fail(compiled, VMM_CONTRACT_RESULT_ERR_FLAGS);
+            }
+        }
+
+        /* Huge pages: Only 2MB supported for now, must be aligned */
+        if (contract->pte_flags & VMM_HUGE) {
+            if (contract->length != (2 * 1024 * 1024)) {
+                return vmm_contract_fail(compiled, VMM_CONTRACT_RESULT_ERR_LENGTH);
+            }
+            if ((contract->virt_start % (2 * 1024 * 1024)) != 0 || 
+                (contract->phys_start % (2 * 1024 * 1024)) != 0) {
+                return vmm_contract_fail(compiled, VMM_CONTRACT_RESULT_ERR_ALIGNMENT);
+            }
+        }
+
         if (owner_is_user && !(contract->pte_flags & VMM_USER)) {
             return vmm_contract_fail(compiled, VMM_CONTRACT_RESULT_ERR_POLICY);
         }
@@ -637,6 +683,7 @@ void vmm_destroy_pml4(uint64_t pml4_phys) {
 }
 
 void vmm_init(void) {
+    kprintf("[VMM] Initializing Virtual Memory Manager...\n");
     if (!hhdm_request.response) kpanic("VMM: HHDM response missing!");
     hhdm_offset = hhdm_request.response->offset;
 
@@ -682,7 +729,7 @@ void vmm_check_efer(void) {
 }
 
 void vmm_dump_page_walk(uint64_t pml4_phys, uint64_t virt) {
-    klog_debug("VMM: Dumping page walk for VA 0x%lx in PML4 0x%lx.", virt, pml4_phys);
+    kprintf("VMM: Dumping page walk for VA 0x%lx in PML4 0x%lx.\n", virt, pml4_phys);
     pt_entry_t* pml4 = phys_to_virt(pml4_phys);
     
     uint64_t pml4_idx = (virt >> 39) & 0x1FF;
@@ -690,21 +737,92 @@ void vmm_dump_page_walk(uint64_t pml4_phys, uint64_t virt) {
     uint64_t pd_idx   = (virt >> 21) & 0x1FF;
     uint64_t pt_idx   = (virt >> 12) & 0x1FF;
 
-    klog_debug("PML4[0x%lx]: 0x%lx", pml4_idx, pml4[pml4_idx]);
-    if (!(pml4[pml4_idx] & VMM_PRESENT)) { klog_debug("  -> Not Present"); return; }
+    kprintf("PML4[0x%lx]: 0x%lx\n", pml4_idx, pml4[pml4_idx]);
+    if (!(pml4[pml4_idx] & VMM_PRESENT)) { kprintf("  -> Not Present\n"); return; }
     
     pt_entry_t* pdpt = phys_to_virt(pml4[pml4_idx] & ~0xFFFULL);
-    klog_debug("  PDPT[0x%lx]: 0x%lx", pdpt_idx, pdpt[pdpt_idx]);
-    if (!(pdpt[pdpt_idx] & VMM_PRESENT)) { klog_debug("    -> Not Present"); return; }
+    kprintf("  PDPT[0x%lx]: 0x%lx\n", pdpt_idx, pdpt[pdpt_idx]);
+    if (!(pdpt[pdpt_idx] & VMM_PRESENT)) { kprintf("    -> Not Present\n"); return; }
 
     pt_entry_t* pd = phys_to_virt(pdpt[pdpt_idx] & ~0xFFFULL);
-    klog_debug("    PD[0x%lx]: 0x%lx", pd_idx, pd[pd_idx]);
-    if (!(pd[pd_idx] & VMM_PRESENT)) { klog_debug("      -> Not Present"); return; }
+    kprintf("    PD[0x%lx]: 0x%lx\n", pd_idx, pd[pd_idx]);
+    if (!(pd[pd_idx] & VMM_PRESENT)) { kprintf("      -> Not Present\n"); return; }
 
     pt_entry_t* pt = phys_to_virt(pd[pd_idx] & ~0xFFFULL);
-    klog_debug("      PT[0x%lx]: 0x%lx", pt_idx, pt[pt_idx]);
-    if (!(pt[pt_idx] & VMM_PRESENT)) { klog_debug("        -> Not Present"); return; }
+    kprintf("      PT[0x%lx]: 0x%lx\n", pt_idx, pt[pt_idx]);
+    if (!(pt[pt_idx] & VMM_PRESENT)) { kprintf("        -> Not Present\n"); return; }
     
-    klog_debug("        -> Mapped Physical: 0x%lx, Flags: 0x%lx", pt[pt_idx] & ~0xFFFULL, pt[pt_idx] & 0xFFF);
+    kprintf("        -> Mapped Physical: 0x%lx, Flags: 0x%lx\n", pt[pt_idx] & ~0xFFFULL, pt[pt_idx] & 0xFFF);
 }
-/* lattice_handle_fault is implemented in lattice.c and called from idt.c */
+bool vmm_handle_fault(uint64_t vaddr, uint64_t error_code) {
+    uint64_t active_cr3 = read_cr3() & ~0xFFFULL;
+    pt_entry_t* pml4 = (pt_entry_t*)phys_to_virt(active_cr3);
+    if (!pml4) return false;
+
+    process_t* proc = scheduler_get_current() ? scheduler_get_current()->owner : NULL;
+    
+    uint64_t virt = vaddr & ~0xFFFULL;
+    pt_entry_t* pt;
+    uint64_t pt_idx;
+    
+    /* 1. Walk the table to find the entry. */
+    uint64_t pml4_idx = (virt >> 39) & 0x1FF;
+    uint64_t pdpt_idx = (virt >> 30) & 0x1FF;
+    uint64_t pd_idx   = (virt >> 21) & 0x1FF;
+    pt_idx   = (virt >> 12) & 0x1FF;
+
+    if (!(pml4[pml4_idx] & VMM_PRESENT)) { kprintf("VMM: Missing PML4E for addr 0x%lx\n", vaddr); return false; }
+    pt_entry_t* pdpt = phys_to_virt(pml4[pml4_idx] & ~0xFFFULL);
+    if (!(pdpt[pdpt_idx] & VMM_PRESENT)) { kprintf("VMM: Missing PDPTE for addr 0x%lx\n", vaddr); return false; }
+    pt_entry_t* pd = phys_to_virt(pdpt[pdpt_idx] & ~0xFFFULL);
+    if (!(pd[pd_idx] & VMM_PRESENT)) { 
+        kprintf("VMM: Missing PDE for addr 0x%lx (PD index 0x%lx)\n", vaddr, pd_idx); 
+        return false; 
+    }
+    
+    /* Handle Huge Page mapping */
+    if (pd[pd_idx] & VMM_HUGE) {
+        if (pd[pd_idx] & VMM_PRESENT) return false;
+        kprintf("VMM: Huge page encountered at 0x%lx, cannot demand page\n", vaddr);
+        return false;
+    }
+    
+    pt = (pt_entry_t*)phys_to_virt(pd[pd_idx] & ~0xFFFULL);
+    uint64_t entry = pt[pt_idx];
+
+    /* Case A: Demand Paging (Not Present, but VMM_DEMAND bit set) */
+    if (!(entry & VMM_PRESENT) && (entry & VMM_DEMAND)) {
+        uint64_t new_frame = pmm_alloc(proc ? mode_to_color(proc->mode) : COLOR_VOID, proc ? proc->pid : 0);
+        if (!new_frame) return false;
+
+        hyper_scrub(phys_to_virt(new_frame), PAGE_SIZE / 8);
+        pt[pt_idx] = (new_frame & ~0xFFFULL) | (entry & 0xFFF) | VMM_PRESENT;
+        
+        cpu_tlb_shootdown_page(virt);
+        return true;
+    }
+/* Case B: Copy-on-Write (Present, Read-only, VMM_COW set, and Write fault) */
+bool is_write = (error_code & 2);
+if ((entry & VMM_PRESENT) && (entry & VMM_COW) && is_write && !(entry & VMM_WRITABLE)) {
+    uint64_t old_frame = entry & 0x000FFFFFFFFFF000ULL;
+    uint64_t new_frame = pmm_alloc(proc ? mode_to_color(proc->mode) : COLOR_VOID, proc ? proc->pid : 0);
+    if (!new_frame) return false;
+
+    void* dst = (void*)(new_frame + hhdm_offset);
+    void* src = (void*)(old_frame + hhdm_offset);
+
+    kprintf("VMM: COW Copy - old=0x%lx new=0x%lx src=0x%lx dst=0x%lx\n",
+            old_frame, new_frame, (uint64_t)src, (uint64_t)dst);
+
+    memcpy(dst, src, PAGE_SIZE);
+
+    /* Map new frame as WRITABLE, remove COW bit */
+    pt[pt_idx] = (new_frame & 0x000FFFFFFFFFF000ULL) | (entry & 0xFFF & ~VMM_COW) | VMM_WRITABLE | VMM_PRESENT;
+
+    /* Flush TLB for this address */
+    cpu_tlb_shootdown_page(virt);
+    return true;
+}
+
+    return false;
+}

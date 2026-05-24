@@ -3,13 +3,33 @@
 
 #include "thread.h"
 
+#define IPC_BUFFER_SIZE 16
+
 /**
- * ipc_endpoint_t
- * A rendezvous point for Synchronous IPC.
+ * ipc_message_t
+ * A buffered message in an endpoint.
  */
 typedef struct {
-    thread_t* wait_head; /* Queue of souls waiting for a rendezvous */
-    thread_t* wait_tail;
+    uint64_t data[4];
+} ipc_message_t;
+
+/**
+ * ipc_endpoint_t
+ * A rendezvous point or buffered queue for IPC.
+ */
+typedef struct {
+    thread_t* send_head; /* Queue of senders waiting to send (buffer full) */
+    thread_t* send_tail;
+    thread_t* recv_head; /* Queue of receivers waiting for a message (buffer empty) */
+    thread_t* recv_tail;
+
+    /* Buffered IPC */
+    ipc_message_t buffer[IPC_BUFFER_SIZE];
+    uint32_t head;
+    uint32_t tail;
+    uint32_t count;
+
+    spinlock_t lock;
 } ipc_endpoint_t;
 
 /**

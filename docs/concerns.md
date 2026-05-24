@@ -84,7 +84,7 @@ It now also tracks remediation status after implementation/testing updates.
 - Files: `kernel/syscall.c:280`, `kernel/syscall.c:282`, `kernel/syscall.c:283`
 - Concern:
   - On `cap_insert` failure, `new_ident` is not freed.
-  - Lineage linkage is TODO, so revocation semantics may not propagate as intended.
+  - At discovery time, lineage linkage was incomplete, so revocation semantics might not propagate as intended.
 - Risk:
   - Memory/resource leak and weaker authority graph consistency.
 
@@ -123,8 +123,8 @@ Additionally completed:
 - `SYS_WAIT` now has a minimal implemented contract (`kernel/syscall.c`, `kernel/thread.c`, `kernel/include/process.h`).
 - `SYS_UNMAP` now has an implemented syscall path with authority checks (`kernel/syscall.c`).
 - Introduced strict rollout path for Law 2 mapping semantics:
-  - `SYS_MAP` strict mode via `a4 bit0`
-  - `SYS_UNMAP` strict marker via `a2 bit0`
+  - `SYS_MAP` strict-only control (`a4 == 1`)
+  - `SYS_UNMAP` strict-only control (`a2 == 1`)
 - Added syscall observability counters and periodic diagnostics for rollout safety:
   - fault/invalid/permission rejection counts
   - map/unmap strict usage and failure-reason counters
@@ -140,4 +140,4 @@ Runtime/build verification completed:
 Residual risks:
 - User-copy hardening is improved, but still uses software range/mapping checks rather than hardware-fault-safe guarded copy mechanisms.
 - `SYS_WAIT` currently provides minimal same-process "wait for any peer exit" semantics, not full process-wait API richness.
-- Strict map/unmap path is available but not yet universally adopted by all user-space mapping call sites.
+- Strict map/unmap is now strict-only in the public user API and closure-gated by kernel-owned Law 2 attestations.

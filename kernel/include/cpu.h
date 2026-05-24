@@ -22,6 +22,18 @@ void cpuid(uint32_t leaf, uint32_t subleaf, struct cpuid_result *result);
 /* Check if Process-Context Identifiers (PCID) are supported */
 bool cpu_has_pcid(void);
 
+/* Check if CET Shadow Stack support is present */
+bool cpu_has_cet_ss(void);
+
+/* Check if CET IBT support is present */
+bool cpu_has_cet_ibt(void);
+
+/* Check if PKU support is present */
+bool cpu_has_pku(void);
+
+/* Check if RDRAND instruction is supported */
+bool cpu_has_rdrand(void);
+
 /* Check if INVPCID instruction is supported */
 bool cpu_has_invpcid(void);
 
@@ -102,10 +114,27 @@ void cpu_init_extended_state(void);
 #define FPU_MODE_FXSAVE  1
 #define FPU_MODE_XSAVE   2
 
+#define CPU_IPI_RESCHED_VECTOR 0x40u
+#define CPU_IPI_TLB_VECTOR 0x41u
+
 uint8_t cpu_get_fpu_mode(void);
 
 /* Current CPU logical ID (SMP scaffolding). */
 uint32_t cpu_get_id(void);
+uint32_t cpu_get_count(void);
+bool cpu_is_bsp(void);
+void cpu_topology_init(void);
+void cpu_smp_stage_ap_stub_start(void);
+uint32_t cpu_get_online_count(void);
+uint32_t cpu_get_started_count(void);
+uint32_t cpu_get_runtime_ready_count(void);
+void cpu_request_ap_runtime_start(uint32_t cpu_id);
+void cpu_mark_sched_online(uint32_t cpu_id);
+void cpu_mark_sched_offline(uint32_t cpu_id);
+void cpu_request_resched_ipi(uint32_t target_cpu);
+void cpu_handle_resched_ipi(void);
+void cpu_handle_tlb_ipi(void);
+bool cpu_tlb_shootdown_page(uint64_t addr);
 
 /* INVPCID Descriptor */
 struct invpcid_desc {

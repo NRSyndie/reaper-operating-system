@@ -72,10 +72,33 @@ Release closure is blocked until all required gates pass.
   - Day 29 strict-runtime closure probes:
     - strict unmap adoption in active boundary/runtime probes
     - strict map/unmap runtime behavior validated in matrix runs
+    - strict-unmap reject-class coverage markers validated
+    - strict-unmap performance budget marker validated
   - Day 30 rejection-auditing closure probes:
     - fate hash-chain integrity remains valid
     - rejected transition evidence is visible in audit reads
     - fate result-code semantics are runtime-validated
+    - reject-reason coverage markers are runtime-validated
+    - Day 30 attestation scan performance budget marker is runtime-validated
+  - Day 31 revalidation closure probes:
+    - double-attestation status/reason coverage remains PASS
+    - reason-mask and budget parity between immediate snapshots is runtime-validated
+    - Day 29/30 metric drift stays within bounded Day 31 drift budgets
+  - Day 32 fault-to-string closure probes:
+    - fault-only Fate read mode returns fault records only
+    - fault records retain required forensic metadata fields
+    - fault-read path stays within bounded Day 32 performance budget
+  - Day 33 full-context closure probes:
+    - sampled fault records carry full context (`RIP/RSP/CS/RFLAGS` and `CR2` for #PF)
+    - sampled fault vectors remain within expected closure set and type-correct fault records
+    - full-context audit path stays within bounded Day 33 performance budget
+  - Day 34 real-fault closure probes:
+    - recoverable real-path lattice first-touch #PF evidence is present in Fate faults
+    - sampled real fault record shows user-fault provenance and context integrity
+    - real-fault audit path stays within bounded Day 34 performance budget
+  - Kernel-owned Law 2 attestation probes:
+    - `[LAW2_ATTEST] day=28/29/30 result=PASS` must be present
+    - no line beginning with `[LAW2_ATTEST] day=28 result=FAIL`, `day=29 result=FAIL`, or `day=30 result=FAIL` may appear
 - Lattice flows pass:
   - create/attach/attune/detach + listener access constraints
 - Fate/audit flows pass:
@@ -151,15 +174,41 @@ Serial logs must contain, at minimum:
 - `[TEST] Day 29 Strict Unmap Adoption Contract: SUCCESS.`
 - `[TEST] Day 29 Runtime Validation Contract: SUCCESS.`
 - `[TEST] Day 29 Strict Path Runtime Contract: SUCCESS.`
+- `[TEST] Day 29 Reason Coverage Contract: SUCCESS.`
+- `[TEST] Day 29 Performance Budget Contract: SUCCESS.`
 - `[TEST] Day 30 Rejection Auditing Contract: SUCCESS.`
 - `[TEST] Day 30 Fate Result-Code Contract: SUCCESS.`
 - `[TEST] Day 30 Rejected Evidence Contract: SUCCESS.`
+- `[TEST] Day 30 Reason Coverage Contract: SUCCESS.`
+- `[TEST] Day 30 Performance Budget Contract: SUCCESS.`
+- `[TEST] Day 31 Revalidation Security Contract: SUCCESS.`
+- `[TEST] Day 31 Revalidation Determinism Contract: SUCCESS.`
+- `[TEST] Day 31 Revalidation Performance Contract: SUCCESS.`
+- `[TEST] Day 32 Fault Filter Contract: SUCCESS.`
+- `[TEST] Day 32 Fault Metadata Contract: SUCCESS.`
+- `[TEST] Day 32 Fault Read Performance Contract: SUCCESS.`
+- `[TEST] Day 33 Full Context Coverage Contract: SUCCESS.`
+- `[TEST] Day 33 Fault Vector Coverage Contract: SUCCESS.`
+- `[TEST] Day 33 Full Context Performance Contract: SUCCESS.`
+- `[TEST] Day 34 Real Fault Path Contract: SUCCESS.`
+- `[TEST] Day 34 User Fault Provenance Contract: SUCCESS.`
+- `[TEST] Day 34 Real Fault Performance Contract: SUCCESS.`
+- line beginning with `[LAW2_ATTEST] day=28 result=PASS`
+- line beginning with `[LAW2_ATTEST] day=29 result=PASS`
+- line beginning with `[LAW2_ATTEST] day=30 result=PASS`
 
 Serial logs must not contain:
 
 - `[DAY28-FAIL]`
 - `[DAY29-FAIL]`
 - `[DAY30-FAIL]`
+- `[DAY31-FAIL]`
+- `[DAY32-FAIL]`
+- `[DAY33-FAIL]`
+- `[DAY34-FAIL]`
+- line beginning with `[LAW2_ATTEST] day=28 result=FAIL`
+- line beginning with `[LAW2_ATTEST] day=29 result=FAIL`
+- line beginning with `[LAW2_ATTEST] day=30 result=FAIL`
 
 ## 5. Final-Product Exit Criteria
 
@@ -170,7 +219,12 @@ The syscall gate is release-ready only when:
 - Day 28 closure suite passes (`./tools/run_day28_closure_suite.sh`)
 - Day 29 closure suite passes (`./tools/run_day29_closure_suite.sh`)
 - Day 30 closure suite passes (`./tools/run_day30_closure_suite.sh`)
+- Day 31 closure suite passes (`./tools/run_day31_closure_suite.sh`)
+- Day 32 closure suite passes (`./tools/run_day32_closure_suite.sh`)
+- Day 33 closure suite passes (`./tools/run_day33_closure_suite.sh`)
+- Day 34 closure suite passes (`./tools/run_day34_closure_suite.sh`)
 - required runtime markers are present and forbidden markers are absent
+- kernel `[LAW2_ATTEST]` markers are the authoritative Day 28/29/30 closure evidence path
 - docs/version logs are synchronized with exact commands and evidence paths
 - no unresolved syscall-gate TODOs remain in code or release checklists
 - ESAK scheduler authority/runtime markers are present in matrix logs for current release slice

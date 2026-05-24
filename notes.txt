@@ -1,0 +1,498 @@
+You are continuing development on Reaper-OS. The project is at Day 87 baseline. Before any daemon implementation work begins, a set of kernel prerequisites must be completed fully — no placeholders, no deferred items except those explicitly waiting on a later subsystem (Archive). Each prerequisite must have a clear done condition verified by a boot marker or matrix pass before the next begins.
+Do not write any implementation code yet. Read through the following files first: kernel/syscall.c, kernel/genesis.c, kernel/capability.c, kernel/include/bootinfo.h, kernel/include/capability.h, kernel/gdt.c, kernel/cpu.c, user/paradigm/main.c, user/lib/reaper.c, user/Makefile, and docs/reports/day87_final_report.md. Also read docs/development_log/TODO.rst and docs/development_log/epoch_three_backlog.md for current state context.
+After reading, produce a complete kernel prerequisites plan covering everything that must land before Genesis and Paradigm userspace implementation can begin. The plan must cover the following five areas in order. For each area, give the current state, the required end state, the concrete file changes needed, and the done condition.
+
+Area 1 — sys_genesis_invoke and GENESIS_CAP Semantics
+Current state: GENESIS_CAP is an inert typed token. It is inserted into userspace cspace slot 1 and published in bootinfo, but there is no syscall path keyed off CAP_TYPE_GENESIS. The current userspace binary only checks that bootinfo->genesis_cap_slot == 1 and never uses it.
+Required end state: GENESIS_CAP has real semantics enforced by the kernel. A new syscall sys_genesis_invoke is callable only by the holder of a CAP_TYPE_GENESIS capability. It supports exactly three operations:
+
+GENESIS_OP_SPAWN — create a new process from a module descriptor. Takes a module index from bootinfo, creates a new address space, loads the ELF, maps the stack, injects an initial capability set, and queues the first thread. Returns the new process's PID and initial capability handles to the caller.
+GENESIS_OP_DELEGATE — mint a specific authority directly into a target process's capability slot, bypassing the caller's own capability logic. This is the mechanism that allows Genesis to hand the audit write capability directly to Sentinel's process without routing it through Paradigm's core capability list.
+GENESIS_OP_DESTROY — irrevocably destroy the GENESIS_CAP. After this operation, no process can invoke sys_genesis_invoke ever again. The kernel must enforce this permanently — not just for the current session.
+
+The GENESIS_OP_DESTROY operation must be the last thing Genesis calls before exiting. After it returns, the kernel must mark the GENESIS_CAP type as permanently exhausted so that even if someone manufactured a fake CAP_TYPE_GENESIS token, the syscall path would reject it.
+Done condition: A boot marker [GENESIS] sys_genesis_invoke: PASS appears in serial.log from a kernel self-test that verifies all three operations are callable with a valid GENESIS_CAP, that GENESIS_OP_DESTROY makes subsequent invocations fail, and that a non-GENESIS_CAP holder cannot invoke the syscall at all.
+
+Area 2 — PID-based Privilege Removal
+Current state: Two kernel paths are gated on pid == 1 rather than capability possession:
+
+SYS_MODE_QUERY returns the real mode only to pid == 1; all others get hardcoded MODE_CASUAL
+SYS_SCHED_AUTH_ROOT_MINT is also restricted to pid == 1
+
+When Genesis becomes the first process and exits, Paradigm will not be PID 1. These checks will silently break reality transition authority and scheduling authority for Paradigm.
+Required end state: Both paths are capability-gated rather than PID-gated.
+
+SYS_MODE_QUERY should return the real mode to any process holding a Reality Control capability. Define a new capability type CAP_TYPE_REALITY_CTRL for this purpose.
+SYS_SCHED_AUTH_ROOT_MINT should be gated on holding a Scheduling Authority capability. This already exists as CAP_TYPE_SCHED_AUTH based on the genesis.c analysis — confirm whether this is sufficient or whether a new type is needed.
+
+Audit every location in kernel/syscall.c where pid == 1 appears and replace each one with the appropriate capability check. There must be no remaining pid == 1 privilege checks anywhere in the kernel after this area is complete.
+Done condition: A boot marker [KERNEL] pid-privilege-removal: PASS appears from a kernel self-test that verifies a non-PID-1 process holding CAP_TYPE_REALITY_CTRL can successfully query the real mode, and a process without that capability cannot — regardless of PID.
+
+Area 3 — Bootinfo v2
+Current state: The bootinfo struct contains: magic, version, hhdm_offset, genesis_cap_slot, physical memmap base/count, kernel physical start/end, and 8 reserved words. It carries no module descriptors, no framebuffer metadata, and no integrity material. It is duplicated identically in kernel/include/bootinfo.h and shared/include/bootinfo.h.
+Required end state: Bootinfo v2 carries everything Genesis and Paradigm need at boot:
+
+All existing fields preserved with the same offsets for ABI compatibility — do not move or remove anything
+A version bump to distinguish v1 from v2
+A module table — an array of module descriptors, each containing: module index, physical base address, size in bytes, ELF entry point if applicable, and a module type tag (e.g. MODULE_TYPE_PARADIGM, MODULE_TYPE_DATA)
+Framebuffer metadata — physical base, width, height, pitch, pixel format — needed by Paradigm's Recovery Manager for the emergency direct framebuffer display path
+An integrity field — a checksum or hash covering the bootinfo struct itself, so Paradigm can verify the struct has not been tampered with between kernel construction and userspace reading
+
+Both kernel/include/bootinfo.h and shared/include/bootinfo.h must be updated identically. The kernel's genesis.c must populate all new fields correctly. The existing userspace bootinfo validation in user/paradigm/main.c must be updated to validate the new fields.
+Done condition: A boot marker [BOOTINFO] v2 validation: PASS appears from a kernel self-test verifying the module table is populated, framebuffer metadata is present, integrity field is correct, and the existing magic/version checks still pass.
+
+Area 4 — Second Boot Module Packaging
+Current state: The build system produces one userspace binary — init.elf — from one main.c. The kernel loads one user module. Genesis and Paradigm must be separate ELF binaries loaded as separate boot modules.
+Required end state: The build system produces two separate ELF binaries — genesis.elf and paradigm.elf. The kernel loads both as separate boot modules and populates the bootinfo v2 module table with entries for each. Genesis is always module index 0 and is always the first process. Paradigm is module index 1 and is loaded but not started — Genesis starts it via GENESIS_OP_SPAWN.
+Specific requirements:
+
+user/genesis/ directory created as a separate build target with its own main.c
+user/paradigm/ directory remains, main.c stays but will be refactored in the userspace phase
+Both targets share the existing linker script unless a layout conflict requires separation
+user/Makefile updated to build both targets
+The kernel's Limine module requests updated to load both ELFs
+kernel/genesis.c updated to populate the bootinfo v2 module table with both module entries
+
+Done condition: A boot marker [MODULES] dual-module load: PASS appears from a kernel self-test verifying both modules are present in memory at boot, their bootinfo entries are populated correctly, and the module integrity fields match the loaded ELF content.
+
+Area 5 — PKU Implementation
+Current state: PKU detection is in the boot feature audit (PKU: NO currently) but PKU is not initialized or enforced. pkru_init() is called in the boot sequence but its implementation is a stub or minimal.
+Required end state: PKU is fully implemented and active on hardware that supports it. This is required before Sentinel can be closed because Sentinel's isolation guarantee requires hardware-enforced memory protection key boundaries.
+Specific requirements:
+
+pkru_init() fully implemented — detect PKU support via CPUID, enable PKU in CR4, set initial PKRU register value granting access to all keys by default
+A pkru_alloc_key() function that allocates one of the 16 available protection keys
+A pkru_set_access() function that modifies the PKRU register to grant or deny read/write access to a specific key for the current thread
+A pkru_assign_region() function that tags a virtual memory region's page table entries with a specific protection key
+Kernel self-test that allocates a key, assigns it to a memory region, verifies access is granted, modifies PKRU to deny access, verifies a fault fires, restores access
+On hardware that does not support PKU, the system must boot cleanly with PKU reported as unavailable and all PKU calls gracefully degraded — no panics, no broken boot
+
+Done condition: The boot feature audit line changes from PKU: NO to PKU: YES on capable hardware. A boot marker [PKU] self-test: PASS appears verifying the allocate/assign/deny/fault/restore cycle works correctly. On incapable hardware, boot completes cleanly with PKU: NO and no errors.
+
+General Rules
+
+Each area must be fully complete and verified before the next begins. Do not parallelize areas.
+For each area, show the full implementation plan and wait for approval before writing any code.
+Do not modify any existing test markers or closure contracts. All existing [TEST] ... SUCCESS. markers must continue to pass after each area lands.
+make -C kernel verify_matrix must pass after each area before moving to the next.
+After all five areas are complete and individually verified, run make -C kernel verify_matrix three consecutive times as the final gate before userspace daemon work begins.
+Update TODO.rst, versions.rst, epoch_three_backlog.md, and generate a closure report for each area as it lands. Do not batch the documentation — each area gets its own paper trail entry.
+The done condition for each area is non-negotiable. A boot marker that says PASS is the evidence, not Codex's assessment that the implementation looks correct.
+
+
+
+
+[[[• I read the requested files and the current baseline is clear: the kernel still directly spawns Paradigm in kernel/genesis.c, GENESIS_CAP is injected but inert, privilege still leaks through pid == 1 in kernel/syscall.c:840 and kernel/
+  syscall.c:1450, bootinfo is still v1 in both kernel/include/bootinfo.h and shared/include/bootinfo.h, userspace still builds one init.elf from user/Makefile, and PKU is only partially wired in kernel/pku.c. The prerequisite work needs to
+  replace the current “kernel launches Paradigm directly” model with a “kernel launches Genesis, Genesis launches Paradigm, then destroys bootstrap authority” model.
+
+  Execution Order
+
+  1. Area 1: sys_genesis_invoke and GENESIS_CAP semantics
+  2. Area 2: PID-based privilege removal
+  3. Area 3: Bootinfo v2
+  4. Area 4: Second boot module packaging
+  5. Area 5: PKU implementation
+
+  No area should start before the previous one lands, has its dedicated PASS marker, and make -C kernel verify_matrix passes.
+
+  Area 1
+  Current state: CAP_TYPE_GENESIS exists in kernel/include/capability.h and shared/include/capability.h, but there is no syscall path keyed to it. kernel/genesis.c injects it into slot 1 of the one process it creates, and user/paradigm/main.c
+  only checks genesis_cap_slot == 1. The kernel itself still performs the spawn work that Genesis is supposed to own.
+
+  Required end state: a kernel-enforced sys_genesis_invoke gate exists, callable only with a live CAP_TYPE_GENESIS plus invoke rights, with exactly three ops:
+
+  - GENESIS_OP_SPAWN: spawn process from a bootinfo module descriptor
+  - GENESIS_OP_DELEGATE: mint authority directly into a target process slot
+  - GENESIS_OP_DESTROY: permanently exhaust Genesis authority globally
+
+  Concrete file changes needed:
+
+  - shared/include/syscall.h: add a new gate op and request/response ABI for Genesis invoke.
+  - user/lib/reaper.c: add userspace wrapper for Genesis invoke.
+  - kernel/include/capability.h and shared/include/capability.h: define any additional capability/right constants needed for invoke/delegate semantics.
+  - kernel/capability.c: add a global “Genesis exhausted” state and a helper the syscall path can consult so fake CAP_TYPE_GENESIS identities fail after destroy.
+  - kernel/syscall.c: add SYS_GENESIS_INVOKE dispatch logic, cap validation, op decoding, argument copying, and fail-closed enforcement.
+  - kernel/genesis.c: split out reusable kernel helpers for process creation/module ELF load/initial cap injection so syscall code can call them instead of duplicating the current kernel bootstrap path.
+  - kernel/main.c: add a kernel self-test that exercises valid Genesis invoke, invalid non-Genesis invoke, and permanent destroy behavior.
+  - Docs per area: docs/development_log/TODO.rst, docs/development_log/versions.rst, docs/development_log/epoch_three_backlog.md, plus a dedicated closure report.
+
+  Done condition:
+
+  - Boot marker: [GENESIS] sys_genesis_invoke: PASS
+  - Evidence must prove:
+      - holder of real GENESIS_CAP can SPAWN, DELEGATE, and DESTROY
+      - post-destroy invocation fails
+      - non-Genesis holder invocation fails
+  - Then make -C kernel verify_matrix passes
+
+  Notes on scope: Area 1 should land the kernel mechanism first, even if the initial self-test uses a kernel-owned probe path rather than full userspace Genesis. It must still make the current direct kernel spawn path refactorable away in Area 4.
+
+  Area 2
+  Current state: SYS_MODE_QUERY and SYS_SCHED_AUTH_ROOT_MINT are still PID-gated in kernel/syscall.c:840 and kernel/syscall.c:1450. This will break once Genesis becomes PID 1 and exits.
+
+  Required end state:
+
+  - SYS_MODE_QUERY returns the real mode only to holders of CAP_TYPE_REALITY_CTRL
+  - SYS_SCHED_AUTH_ROOT_MINT is gated by capability, not PID
+  - no pid == 1 privilege checks remain anywhere in kernel code
+
+  Concrete file changes needed:
+
+  - kernel/include/capability.h and shared/include/capability.h: add CAP_TYPE_REALITY_CTRL; confirm whether existing CAP_TYPE_SCHED_AUTH_ROOT is enough as the minting authority token or whether a distinct mint-authority type is required. My read
+    is that a separate mint authority cap is cleaner, because current root caps are the minted object, not obviously the right to mint them.
+  - kernel/syscall.c: replace PID checks with explicit capability lookups.
+  - kernel/genesis.c: ensure the initial process gets the correct control caps during bootstrap.
+  - user/paradigm/main.c: update boot/runtime probe expectations so mode query tests no longer assume PID 1 privilege.
+  - rg audit across kernel/ to remove any remaining pid == 1 privilege assumptions.
+  - Docs and closure artifacts as above.
+
+  Done condition:
+
+  - Boot marker: [KERNEL] pid-privilege-removal: PASS
+  - Evidence must show:
+      - non-PID-1 process with CAP_TYPE_REALITY_CTRL gets real mode
+      - process without that cap gets redacted mode
+      - result is independent of PID
+  - Then make -C kernel verify_matrix passes
+
+  Dependency note: this area should not begin until Area 1 is in, because Genesis capability semantics define how bootstrap authority becomes explicit instead of PID-shaped.
+
+  Area 3
+  Current state: bootinfo is still v1, identical in kernel/include/bootinfo.h and shared/include/bootinfo.h, with only magic/version/HHDM/genesis slot/memmap/kernel range/reserved fields. kernel/genesis.c writes version 1. user/paradigm/main.c
+  validates only the old fields.
+
+  Required end state: bootinfo v2 preserves the existing field layout up through the current struct, bumps version, and extends with:
+
+  - module descriptors
+  - framebuffer metadata
+  - integrity field over the struct
+  - kernel and shared definitions kept byte-identical
+
+  Concrete file changes needed:
+
+  - kernel/include/bootinfo.h and shared/include/bootinfo.h: append v2 fields only; add module descriptor and framebuffer structs; keep original offsets untouched.
+  - kernel/genesis.c: populate module table, framebuffer metadata, and integrity field.
+  - kernel/limine_reqs.c: no new request is needed for framebuffer because it already exists, but the response must now be consumed for bootinfo population.
+  - user/paradigm/main.c: update validation logic to require v2 invariants and integrity verification.
+  - Likely add integrity helper code in kernel and shared-safe userspace logic, probably using an existing kernel hash/checksum implementation or a simple stable checksum if cross-environment hashing is not yet exposed to userspace.
+  - kernel/main.c: add bootinfo v2 kernel self-test marker.
+  - Docs and closure artifacts.
+
+  Done condition:
+
+  - Boot marker: [BOOTINFO] v2 validation: PASS
+  - Evidence must show:
+      - module table populated
+      - framebuffer metadata present
+      - integrity field correct
+      - old magic/version validation path still coherent
+  - Then make -C kernel verify_matrix passes
+
+  Dependency note: Area 3 should follow Area 2 because the bootinfo module table is what GENESIS_OP_SPAWN will consume in real userspace flow, and privilege cleanup should already be done before expanding bootstrap ABI.
+
+  Area 4
+  Current state: user/Makefile builds one init.elf from paradigm/main.c; kernel/Makefile packages only that one ELF into the ISO; kernel/genesis.c assumes modules[0] is the one userspace image and directly loads it as Paradigm.
+
+  Required end state:
+
+  - two ELF modules: genesis.elf and paradigm.elf
+  - Genesis is module 0 and the first process
+  - Paradigm is module 1, loaded as a boot module but not started by the kernel
+  - bootinfo v2 module table reflects both
+
+  Concrete file changes needed:
+
+  - create user/genesis/main.c
+  - refactor user/Makefile to build:
+      - genesis.elf
+      - paradigm.elf
+      - shared lib/start.s, lib/reaper.c, lib/string.c
+  - kernel/Makefile: package both modules into ISO and update limine.conf generation to emit two module_path lines in order.
+  - kernel/genesis.c: stop treating modules[0] as “Paradigm”; create the first process from Genesis module, map bootinfo there, and leave Paradigm as a bootinfo-described module for later GENESIS_OP_SPAWN.
+  - kernel/main.c: add dual-module self-test marker.
+  - user/paradigm/main.c: keep intact as the later daemon bootstrap target, only minimal adjustments needed for module-index-based validation.
+  - Docs and closure artifacts.
+
+  Done condition:
+
+  - Boot marker: [MODULES] dual-module load: PASS
+  - Evidence must show:
+      - both modules present in memory
+      - Genesis is module index 0
+      - Paradigm is module index 1
+      - bootinfo entries match loaded ELFs
+      - integrity material matches loaded content
+  - Then make -C kernel verify_matrix passes
+
+  Dependency note: this is the point where the architecture flips from “kernel boots Paradigm directly” to the intended “kernel boots Genesis, Genesis boots Paradigm.” It depends on Areas 1 through 3 already being real.
+
+  Area 5
+  Current state: cpu_has_pku() exists in kernel/cpu.c, pkru_init() is called from boot in kernel/main.c, but kernel/pku.c only enables CR4.PKE and logs initialization. There is no key allocator, no thread-level access API, no region assignment
+  path, and no real self-test.
+
+  Required end state:
+
+  - full PKU enablement on capable hardware
+  - graceful no-op degradation on incapable hardware
+  - allocator/API/path to assign keys to mapped regions
+  - self-test proving allow/deny/fault/restore
+
+  Concrete file changes needed:
+
+  - kernel/include/pku.h: add APIs for key alloc, access control, and region assignment.
+  - kernel/pku.c: implement:
+      - pkru_init()
+      - pkru_alloc_key()
+      - pkru_set_access()
+      - pkru_assign_region()
+      - hardware capability/degraded behavior
+  - kernel/include/vmm.h and kernel/vmm.c: add support for encoding protection keys into PTEs.
+  - kernel/cpu.c and possibly thread/scheduler files if PKRU must become part of per-thread execution state.
+  - kernel/idt.c or fault-handling path: ensure PKU fault is recognized and usable by the self-test.
+  - kernel/main.c: add PKU boot self-test and feature audit evidence.
+  - Docs and closure artifacts.
+
+  Done condition:
+
+  - On capable hardware:
+      - feature audit prints PKU: YES
+      - boot marker [PKU] self-test: PASS
+      - self-test covers allocate/assign/grant/deny/fault/restore
+  - On incapable hardware:
+      - boot completes cleanly with PKU: NO
+      - no panic, no broken boot, no stray fail marker
+  - Then make -C kernel verify_matrix passes
+
+  Two implementation cautions:
+
+  - This repo currently compiles kernel C with -mno-sse -mno-mmx -mno-sse2, but that does not block PKU.
+  - The design will likely need per-thread PKRU restore on context switch if PKRU becomes part of runtime isolation, not just a boot-time global.
+
+  Per-Area Validation Discipline
+  For every area, the landing sequence should be:
+
+  1. implement code and self-test marker
+  2. run area-specific boot verification until the required PASS marker is present
+  3. run make -C kernel verify_matrix
+  4. update:
+      - docs/development_log/TODO.rst
+      - docs/development_log/versions.rst
+      - docs/development_log/epoch_three_backlog.md
+      - one dedicated closure report for that area
+  5. do not start the next area until all of the above are complete
+
+  Final Gate Before Daemon Work
+  After Area 5 lands and passes its own marker plus one clean matrix pass, run:
+
+  - make -C kernel verify_matrix
+  - make -C kernel verify_matrix
+  - make -C kernel verify_matrix
+
+  Only after three consecutive successful matrix runs should Genesis/Paradigm daemon implementation begin.
+
+  The only sequencing adjustment I’d recommend is this: Area 4 should not try to move to full userspace Genesis behavior until Area 1’s syscall semantics and Area 3’s bootinfo module table are already in place. Otherwise you end up creating the
+  Genesis binary before the kernel has the ABI needed for it to do real bootstrap work.
+
+  If you approve this plan, I’ll start with Area 1 only and keep the work bounded to that area until its marker and matrix pass are in place.]]]
+
+Plan approved with two clarifications:
+First — the bootinfo v2 integrity field uses BLAKE3, consistent with the audit system. Do not introduce a different checksum primitive.
+Second — at Area 4 close, user/genesis/main.c is a minimal stub only. It reads bootinfo, verifies module index 0, logs [GENESIS] Awake., and yields. Full Genesis bootstrap logic is userspace phase work that comes after the final five-area gate passes. Do not implement GENESIS_OP_SPAWN calls or capability handoff in the stub.
+Begin Area 1. Show the full implementation plan for sys_genesis_invoke before writing any code.
+
+
+[[[• I’m scoping Area 1 down to the exact kernel ABI, internal helpers, test path, and evidence updates now. I’ll keep this to the sys_genesis_invoke slice only and stop at the implementation plan.
+
+• Area 1 Plan
+
+  This area will land the kernel-side sys_genesis_invoke mechanism and its proof marker only. It will not switch boot to a userspace Genesis process yet, and it will not implement the later userspace Genesis stub flow. The goal here is to make
+  GENESIS_CAP real, kernel-enforced, and permanently exhaustible.
+
+  Scope
+
+  - Add a new syscall-gate operation for Genesis invocation.
+  - Enforce that only a live CAP_TYPE_GENESIS capability can use it.
+  - Support exactly three operations:
+      - GENESIS_OP_SPAWN
+      - GENESIS_OP_DELEGATE
+      - GENESIS_OP_DESTROY
+  - Add a kernel self-test that proves all three work and that destroy is permanent.
+  - Preserve existing Day 87 runtime behavior for now: kernel still boots the current single userspace image directly until Area 4.
+
+  Design Decisions
+
+  - GENESIS_OP_DESTROY permanence will be enforced by a kernel-global exhaustion flag, not by revoking one slot or one identity.
+  - The syscall path will require both:
+      - a looked-up capability of type CAP_TYPE_GENESIS
+      - the global Genesis state to still be active
+  - After destroy, even a fabricated CAP_TYPE_GENESIS identity must fail because the syscall path will reject on the global exhausted state before trusting the type alone.
+  - GENESIS_OP_SPAWN will be implemented as a kernel primitive now, but initially used only by the self-test. It will consume a bootinfo/module-style descriptor path so Area 3 and Area 4 can hook into it cleanly later.
+  - GENESIS_OP_DELEGATE will mint directly into a target process C-space slot without requiring the caller to possess the delegated authority first. That bypass is the point of Genesis authority.
+
+  Concrete File Changes
+
+  - shared/include/syscall.h
+      - Add GATE_OP_GENESIS_INVOKE
+      - Add Genesis op constants
+      - Add request/response structs for invoke arguments and results
+  - user/lib/reaper.c
+      - Add a wrapper for sys_genesis_invoke(...)
+      - This is ABI plumbing only; current Paradigm code will not use it yet
+  - kernel/syscall.c
+      - Add legacy syscall id for Genesis invoke
+      - Extend gate-op translation
+      - Add dispatch handler
+      - Validate user buffer layout
+      - Validate capability slot, type, and invoke rights
+      - Reject if global Genesis state is exhausted
+      - Route to per-op kernel helpers
+  - kernel/include/capability.h
+      - Confirm CAP_TYPE_GENESIS rights contract
+      - If needed, define a dedicated invoke-right expectation for Genesis caps
+  - kernel/capability.c
+      - Add global Genesis lifecycle state
+      - Add helper APIs:
+          - query active/exhausted
+          - permanently exhaust
+      - Ensure destroy is one-way
+  - kernel/genesis.c
+      - Refactor current direct spawn logic into reusable internal helpers instead of one monolithic bootstrap path
+      - Separate:
+          - process creation
+          - ELF load from a module image
+          - stack mapping
+          - initial capability injection
+          - first thread queueing
+      - Keep current top-level boot path behavior unchanged for now
+  - kernel/include/genesis.h
+      - Export helper prototypes used by syscall path and self-test
+  - kernel/main.c
+      - Add Area 1 self-test and required PASS/FAIL markers
+  - Docs:
+      - docs/development_log/TODO.rst
+      - docs/development_log/versions.rst
+      - docs/development_log/epoch_three_backlog.md
+      - new Area 1 closure report
+
+  Kernel ABI Plan
+
+  - New gate op: GATE_OP_GENESIS_INVOKE
+  - Userspace wrapper shape:
+      - sys_genesis_invoke(uint32_t genesis_slot, uint32_t op, void *req, uint64_t req_size, void *resp, uint64_t resp_size)
+  - Op-specific request structs:
+      - SPAWN: module index, optional requested mode, destination slots for returned handles
+      - DELEGATE: target pid, target slot, delegated cap type/rights/badge/object payload as allowed by policy
+      - DESTROY: empty/minimal request
+  - Response structs:
+      - SPAWN: new pid, returned handles/slots, status
+      - DELEGATE: status
+      - DESTROY: status
+
+  I’ll keep the structs minimal and versionable so Area 3 bootinfo v2 and Area 4 dual-module boot can plug in without ABI churn.
+
+  Implementation Breakdown
+
+  1. Add syscall ABI constants and request/response structs.
+  2. Add kernel-global Genesis state and helpers.
+  3. Refactor kernel/genesis.c into reusable primitives.
+  4. Implement sys_genesis_invoke dispatch and validation.
+  5. Implement GENESIS_OP_SPAWN.
+  6. Implement GENESIS_OP_DELEGATE.
+  7. Implement GENESIS_OP_DESTROY.
+  8. Add deterministic kernel self-test and markers.
+  9. Run build and matrix.
+  10. Update Area 1 docs and closure report.
+
+  Per-Op Behavior
+
+  - GENESIS_OP_SPAWN
+      - Input: module index
+      - Validate module exists
+      - Create process, address space, cspace
+      - Load ELF from module image
+      - Map user stack
+      - Inject initial capability set
+      - Create and queue first thread
+      - Return new PID and initial capability handles
+  - GENESIS_OP_DELEGATE
+      - Input: target PID, target slot, authority description
+      - Validate target process exists
+      - Mint/insert capability directly into target cspace
+      - Do not require caller possession of that delegated cap
+      - Enforce strict whitelist of what Genesis may delegate in this phase
+  - GENESIS_OP_DESTROY
+      - Validate caller holds active Genesis authority
+      - Atomically mark Genesis globally exhausted
+      - Return success once
+      - All future Genesis invoke attempts fail permanently
+
+  Self-Test Plan
+  The self-test will be kernel-owned and run at boot without changing existing userspace behavior.
+
+  Test sequence:
+
+  1. Create a temporary process/cspace with a valid CAP_TYPE_GENESIS.
+  2. Invoke SPAWN and verify a child process is created successfully.
+  3. Invoke DELEGATE and verify a capability appears in the target process slot.
+  4. Invoke from a non-Genesis capability holder and verify denial.
+  5. Invoke DESTROY using the valid Genesis cap and verify success.
+  6. Invoke any Genesis op again with the same cap and verify failure.
+  7. Fabricate or inject another CAP_TYPE_GENESIS identity after destroy and verify failure again.
+
+  Required marker:
+
+  - [GENESIS] sys_genesis_invoke: PASS
+
+  Required fail marker pattern:
+
+  - [GENESIS-FAIL] ...
+
+  Verification Gate
+  For Area 1 to close:
+
+  - make -C kernel
+  - boot log contains [GENESIS] sys_genesis_invoke: PASS
+  - boot log contains no [GENESIS-FAIL]
+  - existing required [TEST] ... SUCCESS. markers still hold
+  - make -C kernel verify_matrix passes
+
+  Risks To Control
+
+  - Do not break current boot path while refactoring kernel/genesis.c.
+  - Do not let DESTROY merely revoke one identity; it must be global and irreversible.
+  - Do not allow DELEGATE to become a generic unrestricted mint primitive beyond Genesis semantics.
+  - Do not silently reuse PID-based privilege in the new path; Area 1 should already be capability-driven internally.
+
+  If this Area 1 implementation plan is approved, I’ll start with the ABI and kernel helper refactor first, then wire the syscall path and self-test.]]]
+
+
+
+Plan approved with two clarifications:
+First — the DELEGATE whitelist for this phase is exactly four types: CAP_TYPE_REALITY_CTRL, CAP_TYPE_AUDIT_WRITE, CAP_TYPE_SCHED_AUTH, and CAP_TYPE_SCHED_AUTH_ROOT. DELEGATE must reject any other type with a [GENESIS-FAIL] marker even if the caller holds valid Genesis authority.
+Second — add an explicit cleanup step to the self-test after step 7. The temporary process created in step 2 must be fully destroyed — address space reclaimed, capability slots cleared, process structure freed — before the self-test completes. The self-test must leave no orphaned resources.
+Begin with the ABI constants and kernel helper refactor. Show each file's changes before writing them. 
+
+
+
+
+Verification pass accepted. The discrepancies are understood and the Area 1 scope is now clearer. Proceed with implementation using these updated assumptions:
+
+Do not add GATE_OP_GENESIS_INVOKE or the ABI structs — they already exist at op 27
+Do not create kernel/include/genesis.h — it already exists
+Do not extract genesis helpers from kernel/genesis.c — they already exist
+The actual implementation work for Area 1 is:
+
+Add SYS_GENESIS_INVOKE as the next internal syscall ID after 25 in kernel/syscall.c
+Add GATE_OP_GENESIS_INVOKE to the gate_op_to_legacy_sys dispatch table
+Add the dispatch handler in kernel/syscall.c with full capability validation — must check CAP_TYPE_GENESIS, CAP_RIGHT_INVOKE, and the global exhaustion state
+Add global Genesis exhaustion state to kernel/capability.c — atomic flag, one-way, permanent after destroy
+Implement GENESIS_OP_SPAWN handler using genesis_spawn_process_from_module
+Implement GENESIS_OP_DELEGATE handler with the four-type whitelist: CAP_TYPE_REALITY_CTRL, CAP_TYPE_AUDIT_WRITE, CAP_TYPE_SCHED_AUTH, CAP_TYPE_SCHED_AUTH_ROOT
+Implement GENESIS_OP_DESTROY handler that atomically sets the exhaustion flag
+Add self-test to kernel/main.c covering all seven test steps including cleanup
+Add userspace wrapper to user/lib/reaper.c if not already present
+
+
+
+Show the changes to kernel/syscall.c first — specifically the dispatch table addition and the handler skeleton — before writing any of them.

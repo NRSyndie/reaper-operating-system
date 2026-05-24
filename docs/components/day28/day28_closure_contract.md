@@ -10,6 +10,7 @@ Day 28 closure covers:
 - deterministic strict negative-path enforcement checks
 - strict-chain lifecycle correctness (link, access, unmap/remap)
 - deterministic runtime evidence and fail-closed marker gates
+- kernel-owned Day 28 attestation evidence (`[LAW2_ATTEST] day=28`)
 
 ## 2. Vision Alignment Contract
 
@@ -36,14 +37,17 @@ Required markers:
 - `[TEST] Day 28 Strict Adoption Contract: SUCCESS.`
 - `[TEST] Day 28 Strict Negative Path Contract: SUCCESS.`
 - `[TEST] Day 28 Strict Chain Contract: SUCCESS.`
+- line beginning with `[LAW2_ATTEST] day=28 result=PASS`
 
 Forbidden markers:
 
 - `[DAY28-FAIL]`
+- any line beginning with `[LAW2_ATTEST] day=28 result=FAIL`
 
 ## 6. Enforcement Points
 
 - strict map/unmap validation: `kernel/syscall.c`
+- kernel attestation records: `kernel/mode.c` (`FATE_RECORD_ATTEST`)
 - strict adoption probes + markers: `user/paradigm/main.c`
 - closure gates: `tools/run_law2_fate_matrix.sh`, `tools/run_day28_closure_suite.sh`
 

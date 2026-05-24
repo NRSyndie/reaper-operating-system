@@ -16,11 +16,10 @@ int sys_mode_query(void);
 int sys_mode_transition(uint32_t target_mode);
 int sys_mode_transition_ex(uint32_t target_mode, uint32_t auth_flags);
 
-/* Recursive VMM API (strict contract enforced by kernel) */
+/* Recursive VMM API (strict-only contract) */
 int sys_map(uint32_t parent_cap, uint32_t index, uint32_t child_cap, uint64_t flags);
-int sys_map_strict(uint32_t parent_cap, uint32_t index, uint32_t child_cap, uint64_t flags);
 int sys_unmap(uint32_t parent_cap, uint32_t index);
-int sys_unmap_strict(uint32_t parent_cap, uint32_t index);
+int sys_unmap_ctrl(uint32_t parent_cap, uint32_t index, uint64_t ctrl);
 int sys_cap_retype(uint32_t src, uint32_t dst, uint32_t new_type, uint32_t badge);
 int sys_frame_alloc(uint32_t slot);
 int sys_cap_delete(uint32_t slot);
@@ -31,9 +30,12 @@ int sys_lattice_attach(uint32_t lattice_cap, uint64_t vaddr);
 int sys_lattice_detach(uint32_t lattice_cap, uint64_t vaddr);
 int sys_attune(uint32_t lattice_cap, uint32_t index);
 int sys_cap_mint(uint32_t src, uint32_t dst, uint16_t rights, uint32_t badge, uint8_t modes);
+int sys_cap_invoke(uint32_t slot, uint64_t a0, uint64_t a1, uint64_t a2);
+int sys_cap_invoke_ex(uint32_t slot, uint64_t a0, uint64_t a1, uint64_t a2, uint64_t options);
 int sys_fate_read(void* buffer, int count, uint32_t audit_cap);
 int sys_fate_read_ex(void* buffer, int count, uint32_t audit_cap, uint32_t read_mode);
 int sys_audit(uint64_t target_pid, uint64_t flags, void* out_buf, uint64_t count);
+int sys_law2_attest(gate_law2_attest_t* out_attest);
 int sys_sched_metrics(gate_sched_metrics_t* out_metrics);
 int sys_sched_auth_root_mint(uint32_t mode_binding,
                              uint64_t max_total_budget,
@@ -45,6 +47,11 @@ int sys_sched_auth_thread_derive(uint32_t root_slot,
                                  uint32_t max_slice,
                                  uint32_t weight,
                                  uint64_t local_max_accumulated);
+int sys_genesis_invoke(uint32_t genesis_slot,
+                       uint32_t op,
+                       const void* req,
+                       uint64_t req_size,
+                       void* resp);
 
 /* String utils (implemented in string.c or similar) */
 void* memset(void* dest, int c, unsigned long n);

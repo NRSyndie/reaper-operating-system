@@ -13,7 +13,7 @@
 __attribute__((aligned(0x10)))
 static idt_entry_t idt[256];
 
-static idtr_t idtr;
+idtr_t idtr_shared;
 static spinlock_t idt_metrics_lock = 0;
 static idt_metrics_t idt_metrics = {0};
 
@@ -116,14 +116,16 @@ static void pic_remap(void) {
     }
 
 extern void timer_stub(void);
+extern void ipi_resched_stub(void);
+extern void ipi_tlb_stub(void);
 extern void isr_spurious_39(void);
 extern void isr_spurious_47(void);
 void idt_note_spurious39(void);
 void idt_note_spurious47(void);
 
 void idt_init(void) {
-    idtr.limit = sizeof(idt) - 1;
-    idtr.base  = (uint64_t)&idt;
+    idtr_shared.limit = sizeof(idt) - 1;
+    idtr_shared.base  = (uint64_t)&idt;
 
     // Install the first 32 ISRs
     for (int i = 0; i < 32; i++) {
@@ -140,12 +142,14 @@ void idt_init(void) {
     // Remap PIC and install Timer (IRQ 0 -> Vector 32)
     pic_remap();
     idt_set_gate(32, (uint64_t)timer_stub, KERNEL_CS_SELECTOR, IDT_TA_INTERRUPT_GATE, 0);
+    idt_set_gate(CPU_IPI_RESCHED_VECTOR, (uint64_t)ipi_resched_stub, KERNEL_CS_SELECTOR, IDT_TA_INTERRUPT_GATE, 0);
+    idt_set_gate(CPU_IPI_TLB_VECTOR, (uint64_t)ipi_tlb_stub, KERNEL_CS_SELECTOR, IDT_TA_INTERRUPT_GATE, 0);
 
     /* Install Spurious Handlers */
     idt_set_gate(39, (uint64_t)isr_spurious_39, KERNEL_CS_SELECTOR, IDT_TA_INTERRUPT_GATE, 0);
     idt_set_gate(47, (uint64_t)isr_spurious_47, KERNEL_CS_SELECTOR, IDT_TA_INTERRUPT_GATE, 0);
 
-    __asm__ volatile ("lidt %0" : : "m"(idtr));
+    __asm__ volatile ("lidt %0" : : "m"(idtr_shared));
     
     }
 
@@ -158,8 +162,8 @@ bool idt_get_metrics(idt_metrics_t* out_metrics) {
 }
 
 bool idt_self_test(void) {
-    if (idtr.base != (uint64_t)&idt) return false;
-    if (idtr.limit != (sizeof(idt) - 1)) return false;
+    if (idtr_shared.base != (uint64_t)&idt) return false;
+    if (idtr_shared.limit != (sizeof(idt) - 1)) return false;
     if ((idt[8].ist & 0x7) != 1) return false;
     if (idt[1].attributes != IDT_TA_TRAP_GATE) return false;
     if (idt[3].attributes != IDT_TA_USER_TG) return false;
@@ -195,10 +199,17 @@ void isr_handler(registers_t *regs) {
                                  cr2, regs->rsp, regs->cs, regs->rflags, true);
             
             extern bool lattice_handle_fault(uint64_t vaddr, uint64_t error_code);
+            extern bool vmm_handle_fault(uint64_t vaddr, uint64_t error_code);
+
             if (lattice_handle_fault(cr2, regs->err_code)) {
                 /* VOID WALL or PRISM MATERIALIZATION SUCCESSful. 
                  * Returning from the interrupt will retry the faulting instruction.
                  */
+                return;
+            }
+
+            if (vmm_handle_fault(cr2, regs->err_code)) {
+                /* DEMAND or COW materialized. Retry. */
                 return;
             }
 

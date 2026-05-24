@@ -108,3 +108,9 @@ These expansions evolve Epoch I foundations into the full Pentabrid architecture
 
 ---
 **"From the Void, we forge the laws. In the Laws, we find the Peace."**
+
+## Epoch III Carry-Forward Note (2026-03-15)
+- Slot 1 standard microkernel Step 3 (post-Epoch II carry-forward work) is now landed:
+  - baseline `rwlock`, `seqlock`, and `rcu` primitives in kernel utilities
+  - deterministic boot self-tests and matrix revalidation (3/3)
+- Active next target remains Slot 1 Step 4 buffered IPC queues under Epoch III execution.

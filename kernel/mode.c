@@ -12,6 +12,7 @@
 #include <include/vmm.h>
 #include <include/port_io.h>
 #include <include/power.h>
+#include <include/audit.h>
 
 /* 
  * Global Kernel Mode State 
@@ -189,11 +190,32 @@ void mode_log_sched_event(uint32_t pid, uint8_t event_code, uint32_t detail, fat
     spinlock_irqrestore(&kernel_mode_state.transition_lock, flags);
 }
 
+void mode_log_law2_attestation(uint8_t day_id, fate_result_t result, uint16_t reason_code, uint32_t detail) {
+    uint64_t flags = spinlock_irqsave(&kernel_mode_state.transition_lock);
+    struct mode_transition record;
+
+    memset(&record, 0, sizeof(record));
+    record.timestamp_tsc = rdtsc();
+    record.record_type = FATE_RECORD_ATTEST;
+    record.result_code = (uint8_t)result;
+    record.fault_vector = day_id;
+    record.fault_error_code = (uint32_t)reason_code;
+    record.fault_rip = (uint64_t)detail;
+    record.trigger_source = TRANSITION_SOURCE_KERNEL;
+    record.from_mode = (uint8_t)kernel_mode_state.current_mode;
+    record.to_mode = (uint8_t)kernel_mode_state.current_mode;
+    record.requestor_pid = 0;
+
+    fate_append_record(&record);
+    spinlock_irqrestore(&kernel_mode_state.transition_lock, flags);
+}
+
 static bool fate_record_matches_filter(const struct mode_transition* rec, fate_read_mode_t mode) {
     if (mode == FATE_READ_ALL) return true;
     if (mode == FATE_READ_TRANSITIONS) return rec->record_type == FATE_RECORD_TRANSITION;
     if (mode == FATE_READ_FAULTS) return rec->record_type == FATE_RECORD_FAULT;
     if (mode == FATE_READ_LATTICE) return rec->record_type == FATE_RECORD_LATTICE;
+    if (mode == FATE_READ_ATTEST) return rec->record_type == FATE_RECORD_ATTEST;
     return false;
 }
 
@@ -580,6 +602,14 @@ static bool env_apply_transition(const env_compiled_transition_t* compiled, env_
     if (compiled->source == TRANSITION_SOURCE_KERNEL) kernel_mode_state.stats.transitions_auto++;
     else kernel_mode_state.stats.transitions_manual++;
     __atomic_fetch_add(&kernel_mode_state.security_epoch, 1, __ATOMIC_RELAXED);
+    
+    // Day 12 Audit: Rotate seed and strike phase shift
+    audit_rotate_seed(compiled->to_mode, mode_get_security_epoch());
+    audit_meta_t meta = {0};
+    meta.sched.tid = (uint32_t)compiled->source;
+    meta.sched.auth_status = compiled->auth_flags;
+    audit_strike(AUDIT_EVENT_PHASE_SHIFT, AUDIT_RESULT_OK, (uint64_t)compiled->to_mode << 32 | (uint64_t)current, meta);
+
     scheduler_on_mode_transition(current, compiled->to_mode, mode_get_security_epoch());
 
     mode_enter_secure_context();

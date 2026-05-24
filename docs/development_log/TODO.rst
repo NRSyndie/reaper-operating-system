@@ -226,6 +226,56 @@ Reaper-OS: Development Roadmap
    | Day 71 [DONE] | Day 27 Closure Ratification      | Boundary-hardening/strict-foundation regressions | Added deterministic Day 27 boundary + strict closure markers/fail markers and    |
    |               |                                  | needed deterministic release-blocking gates.      | extended matrix + repeat-run ratification with synchronized closure artifacts.  |
    +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 72 [DONE] | Law 2 Closure Hardening          | Marker-centric closure trust and strict/legacy    | Added kernel-owned Law 2 attestation records/markers, strict-only map/unmap ABI  |
+   |               | (Kernel Attestation + Strict API)| ambiguity left Day 28/29/30 vulnerable to drift. | cutover, and ratified matrix + Day 28/29/30 suites with synchronized contracts.   |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 73 [DONE] | Day 29 Enhancement Ratification  | Day 29 pass/fail-only evidence and missing reject | Added reason-coded Day 29 kernel attestation coverage, strict-unmap performance    |
+   |               | (Reason Coverage + Perf Gate)    | class/perf-budget closure gates allowed residual  | budget gates, expanded Paradigm reject probes, and upgraded matrix/day29 suites    |
+   |               |                                  | ambiguity in strict-unmap behavior quality.       | to require reason/performance markers as release-blocking evidence.                |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 74 [DONE] | Day 30 Enhancement Ratification  | Day 30 reject evidence lacked required reason      | Added Day 30 reject-reason mask coverage gates, attestation scan-latency budget,   |
+   |               | (Reason Coverage + Perf Gate)    | class coverage and explicit performance budgeting. | deterministic reject probes, and upgraded matrix/day30 suites with release-blocking|
+   |               |                                  |                                                  | reason/performance markers.                                                         |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 75 [DONE] | Day 31 Enhancement Ratification  | Day 31 revalidation remained a one-off pass     | Added deterministic Day 31 double-attestation parity and drift-budget gates,       |
+   |               | (Determinism + Drift Gate)       | without release-blocking determinism/perf checks.| explicit Day 31 success/fail markers, and upgraded matrix/day31 suite enforcement. |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 76 [DONE] | Day 32 Enhancement Ratification  | Day 32 fault integration lacked deterministic   | Added Day 32 fault-filter isolation, fault metadata integrity, and bounded fault   |
+   |               | (Filter + Perf Gate)             | closure gates for filter correctness/perf budget.| read-budget markers/fail paths with upgraded matrix/day32 suite enforcement.       |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 77 [DONE] | Day 33 Enhancement Ratification  | Day 33 full-context capture lacked deterministic| Added Day 33 full-context integrity/vector-sanity/performance gates with explicit  |
+   |               | (Context + Perf Gate)            | closure gates and explicit runtime budgets.      | Day 33 success/fail markers and upgraded matrix/day33 suite enforcement.           |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 78 [DONE] | Day 34 Enhancement Ratification  | Day 34 real-path validation lacked deterministic| Added Day 34 real-fault-path/provenance/performance gates with explicit Day 34     |
+   |               | (Real Path + Perf Gate)          | closure gates and bounded audit runtime evidence.| success/fail markers and upgraded matrix/day34 suite enforcement.                  |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 79 [DONE] | Slot 1 / Step 3 Concurrency      | SMP race conditions in shared data structures;  | Implemented `rwlock`, `seqlock`, and `rcu` primitives  |
+   |               | Primitives                       | lock contention overhead.                       | with deterministic boot self-tests.                   |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 80 [DONE] | Slot 1 / Step 4 Buffered IPC     | Buffer overflow in message queues; latency in   | Implemented circular-buffered IPC endpoints with      |
+   |               |                                  | rights-aware cap invocation.                    | mandatory rights-mask enforcement.                    |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 81 [DONE] | Slot 1 / Step 5 Memory Upgrades  | Complexity of #PF handling for COW; huge page   | Implemented Demand Paging, COW, and Huge Page support |
+   |               |                                  | fragmentation.                                  | via software-PTE bits and hardened #PF dispatcher.    |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 82 [DONE] | Slot 1 / Step 1 & 2 SMP + TLB    | AP core bring-up race conditions; TLB          | Implemented SMP AP bring-up and IPI-based TLB         |
+   |               |                                  | shootdown latency over IPI.                     | shootdown for cross-core consistency.                 |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 83 [DONE] | Audit Foundation & Fate String   | Sealed-storage root entropy remains deferred   | Implemented 128-byte aligned, SMP-safe atomic audit   |
+   |               | Redesign                         | for Ghost Mode fallback hardening.             | lattice with BLAKE3 chaining, RDRAND primary seed, overflow tracking, and reality-bound seed rotation. |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 84 [DONE] | ACPI Layer 1 & 2 Foundation      | Firmware table diversity; AML-dependent        | Implemented RSDP/RSDT/XSDT discovery plus static parsing |
+   |               |                                  | interpretation remains explicitly deferred.    | for MADT, FADT, HPET, MCFG, and DMAR with boot self-test evidence. |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 85 [DONE] | Architecture + Documentation     | Architecture drift and stale implementation    | Synchronized architecture/status/report/version docs with |
+   |               | Synchronization                  | claims obscured the real system state.         | the current Genesis/Paradigm/Sentinel and Day 83/84 code reality. |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 86 [DONE] | DMA Authority Contract + DMAR    | Hardware isolation could drift into implicit   | Froze canonical DMAR inventory, explicit IOMMU state/    |
+   |               | Truth Freeze                     | policy without a truth/audit model.            | degraded policy, and audit-visible inventory semantics before VT-d enablement. |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
+   | Day 87 [DONE] | Paradigm Stack Baseline Closure  | Early userspace bootstrap could fault below    | Expanded the Genesis-mapped Paradigm user stack from one  |
+   |               |                                  | the fixed entry RSP and invalidate runtime     | page to eight pages, removed the observed `0x7ffdd0` boot fault, and revalidated the runtime matrix in three consecutive clean passes. |
+   +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
 
 
 
@@ -269,7 +319,9 @@ Reaper-OS: Development Roadmap
 
 
 
-All foundational debts listed above have been successfully repaid... table:: Future Epochs: Scaling the Multiverse
+All foundational debts listed above have been successfully repaid.
+
+.. table:: Future Epochs: Scaling the Multiverse
    :widths: 15 25 30 30
 
    +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
@@ -288,11 +340,116 @@ All foundational debts listed above have been successfully repaid... table:: Fut
    |               |                                  |                                                | and auditability guarantees.                                                                                          |
    +---------------+----------------------------------+------------------------------------------------+-----------------------------------------------------------------------------------------------------------------------+
 
+---------------------------------------------------
+Implementation Gap Checklist (Confirmed Missing)
+---------------------------------------------------
+
+The following items were re-audited in current kernel/userspace sources and are
+still missing as concrete implementations (not merely renamed).
+
+Slot 1: Standard Microkernel Tasks (Direct Baseline Additions)
+===============================================================
+
+These are features we can implement in mostly conventional form first.
+
+Memory Management
+
+- [x] Memory path upgrades (demand paging, COW, huge pages).
+  (Implemented via software-PTE bits and #PF handler logic).
+
+Scheduling and IPC
+
+- [ ] Priority-based scheduler policy.
+  (Current policy is deterministic weighted RR tokens, not priority scheduling.)
+- [ ] Real-time scheduling classes (SCHED_FIFO / SCHED_RR semantics).
+- [ ] Tickless scheduling (NO_HZ-style dynamic tick suppression).
+  (Current runtime uses periodic PIT heartbeat.)
+- [x] Buffered message queues.
+  (Implemented via `ipc_endpoint_t` circular buffer and rights-aware `sys_cap_invoke`).
+- [ ] IPC call-chain propagation/tracking.
+
+SMP and Concurrency
+
+- [x] SMP bring-up (booting AP cores in runtime path).
+  (Implemented via per-CPU GDT/TSS/IDT and scheduler activation).
+- [x] TLB shootdown over IPI for cross-core address-space invalidation.
+- [ ] Full multicore load balancing across active AP run queues.
+  (Current same-mode steal scaffolding exists, but AP runtime is not active.)
+- [x] RCU primitives.
+  (Baseline `rcu` reader/epoch synchronization primitive is now present in `kernel/include/utils.h`.)
+- [x] Reader-writer locks.
+  (Baseline `rwlock` primitives are now present in `kernel/include/utils.h`.)
+- [x] Seqlocks.
+  (Baseline `seqlock` primitives are now present in `kernel/include/utils.h`.)
+
+Security Hardening and Reliability
+
+- [ ] ASLR for kernel virtual layout randomization.
+  (Kernel image is linked at a fixed high-half base today.)
+- [ ] KASLR boot-time randomized kernel load offset.
+- [ ] SMEP/SMAP enablement and enforcement path.
+- [ ] KPTI (kernel/user page table isolation split).
+- [ ] User-space stack guard pages.
+  (Kernel stack canaries exist; explicit user stack guard mapping is not present.)
+- [ ] Retpoline / Spectre-v2 compiler+runtime mitigation path.
+- [ ] Panic-to-restart orchestration policy.
+  (Kernel panic exists and explicit reboot primitive exists, but panic path halts.)
+- [ ] Watchdog timer integration.
+- [ ] GDB remote debugging stub.
+
+Device and Virtualization Baseline
+
+- [x] ACPI Layer 1/2 table discovery and static parsing.
+  (Implemented via `acpi_init()` + `acpi_find_table()` with MADT/FADT/HPET/MCFG/DMAR parsing and `[TEST] ACPI Layer 1+2: SUCCESS.`.)
+- [ ] DMA mapping API (map/unmap + ownership/IOVA lifecycle).
+  (PMM has a DMA zone, but no dedicated DMA mapping interface.)
+- [x] IOMMU inventory initialization and degraded-policy truth model.
+  (Implemented via `iommu_init()` inventory classification and boot self-tests; VT-d translation enablement remains open.)
+- [ ] MSI/MSI-X programming and interrupt routing support.
+- [ ] VT-x/AMD-V (or EL2 on ARM) initialization path.
+- [ ] VMCS/VMCB lifecycle management.
+- [ ] EPT/NPT nested translation support.
+- [ ] VM-exit handling pipeline.
+
+Slot 2: Reaper-Core Tasks (Vision/Security/Performance Adaptations)
+====================================================================
+
+These tasks require Reaper-Core-specific behavior and contracts, not only
+drop-in conventional implementations.
+
+- [ ] Per-mode capability spaces (or equivalent authority partitioning model).
+  (Mode gating exists today; this is a deeper authority-space split.)
+- [ ] Device capability delegation model integrated with lineage and revocation.
+- [ ] MPK/PKU integration with mode/envelope policy (PCID fallback preserved).
+- [ ] Cache-line alignment policy for hot structs with measured closure budgets.
+- [ ] Slot-1 feature adaptations to Fate markers and closure gates
+  (required/forbidden markers + repeat-run evidence for each new subsystem).
+- [ ] Mode/reality-aware policy shaping for new scheduler, memory, and IPC paths
+  (fail-closed behavior under transitions and epoch changes).
+
+Slot 1 Start Order
+==================
+
+Start with foundations that unlock the rest of Slot 1:
+
+Current kickoff status:
+- [x] Slot 1 / Step 1 landed (SMP bring-up + CPU ID correctness + IPI transport skeleton).
+- [x] Slot 1 / Step 2 landed (TLB shootdown over IPI).
+- [x] Slot 1 / Step 3 landed (`rwlock` + `seqlock` + baseline `rcu` primitives with kernel boot self-test markers).
+- [x] Slot 1 / Step 4 landed (Buffered IPC queues + rights-aware endpoint invocation).
+- [x] Slot 1 / Step 5 landed (Memory path upgrades: demand paging, COW, huge pages).
+
+- [x] 1) SMP bring-up + CPU ID correctness + IPI transport skeleton.
+- [x] 2) TLB shootdown over IPI.
+- [x] 3) Conventional lock primitives + baseline RCU (`rwlock`, `seqlock`, `rcu`).
+- [x] 4) Buffered IPC queues.
+- [x] 5) Memory path upgrades (demand paging, COW, huge pages).
+
 --------------------------
 Project Estimates & Status
 --------------------------
 
-*   **Current Phase:** Epoch III Closure Ratification (Days 46/47/54/55 closed on February 24, 2026; Days 12/13/14/15 closures ratified on March 1, 2026; Days 16/17/18/19/20/21/22/23/24/25/26/27 closures ratified on March 2, 2026 with matrix evidence).
+*   **Current Phase:** Epoch III Closure Ratification + Slot 1 Standard Microkernel Foundations (Days 46/47/54/55 closed on February 24, 2026; Days 12/13/14/15 closures ratified on March 1, 2026; Days 16/17/18/19/20/21/22/23/24/25/26/27 closures ratified on March 2, 2026; Day 72 Law 2 closure hardening ratified on March 7, 2026; Day 73 Day 29 enhancement ratification completed on March 7, 2026; Day 74 Day 30 enhancement ratification completed on March 7, 2026 with reason/performance-gated evidence; Day 75 Day 31 enhancement ratification completed on March 7, 2026 with deterministic revalidation and drift-budget gating; Day 76 Day 32 enhancement ratification completed on March 7, 2026 with fault-filter and read-budget gating; Day 77 Day 33 enhancement ratification completed on March 7, 2026 with full-context integrity and audit-budget gating; Day 78 Day 34 enhancement ratification completed on March 7, 2026 with real-path provenance and audit-budget gating; Day 79 Slot 1 Step 3 baseline concurrency primitives landed on March 15, 2026; Day 80 Slot 1 Step 4 buffered IPC queues landed on April 19, 2026; Day 81 Slot 1 Step 5 memory path upgrades landed on April 19, 2026; Day 82 Slot 1 Step 1/2 SMP bring-up and TLB shootdown landed on April 19, 2026 with matrix revalidation; Day 83 audit foundation hardening landed with BLAKE3-backed chaining and RDRAND-first seeding on April 26, 2026; Day 84 ACPI Layer 1/2 table discovery and static parsing landed on April 29, 2026; Day 85 architecture/documentation synchronization landed on April 29, 2026; Day 86 DMA authority contract and DMAR truth freeze landed on April 29, 2026; Day 87 Paradigm stack baseline closure completed on May 13, 2026 with three consecutive clean matrix invocations after the bootstrap stack fix. Broader memory-hardening items such as VT-d translation enablement, production DMA ownership lifecycle, boot-time randomized KASLR, and explicit user stack guard pages remain in progress).
 *   **Total Estimated Time:** 13 - 19 Weeks (~4 Months).
 *   **Strategy:** Reaper Envelope (Compatibility-First ABI + Hardware-Enforced Envelope Tiers).
 
