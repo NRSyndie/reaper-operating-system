@@ -8,6 +8,7 @@
 #include "mode.h"
 #include "process.h"
 #include "thread.h"
+#include "../../shared/include/syscall.h"
 
 typedef struct {
     uint32_t genesis_cap_slot;
@@ -25,6 +26,9 @@ typedef struct {
     uint64_t bootinfo_phys;
     genesis_initial_caps_t caps;
 } genesis_spawn_result_t;
+
+#define GENESIS_DEFAULT_STACK_TOP   0x800000
+#define GENESIS_DEFAULT_STACK_PAGES 8
 
 /**
  * genesis_bridge_spawn: Injects the first capability into user-space 
@@ -45,5 +49,8 @@ int genesis_spawn_process_from_module(struct limine_file* module,
                                       bool mint_sched_auth,
                                       bool queue_thread,
                                       genesis_spawn_result_t* out_result);
+
+uint32_t genesis_get_paradigm_pid(void);
+uint64_t genesis_syscall_dispatch(process_t* owner, uint32_t op, uint32_t cap_slot, uint64_t req_ptr, bool is_kernel);
 
 #endif /* REAPER_GENESIS_H */

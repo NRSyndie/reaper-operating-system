@@ -529,6 +529,51 @@ static void test_recursive_revocation(void) {
     for (volatile int i = 0; i < 5000000; i++);
 }
 
+static void test_genesis_lifecycle(void) {
+    kprintf("[TEST] Genesis Lifecycle validation (7 Steps)...\n");
+    uint32_t pid = genesis_get_paradigm_pid();
+    process_t* paradigm = process_find_by_pid(pid);
+    if (!paradigm) {
+        kprintf("GENESIS-TEST: Paradigm (PID %u) not found\n", pid);
+        kpanic("GENESIS-TEST: Paradigm missing");
+    }
+
+    /* 1. Initial State Check */
+    if (cap_genesis_is_exhausted()) kpanic("GENESIS-TEST: Exhausted at boot");
+
+    /* 2. Rejection: Non-Genesis Capability Type.
+     * Per genesis.c:genesis_bridge_spawn, slot 3 is CAP_TYPE_RAM (ram_slot).
+     */
+    if (genesis_syscall_dispatch(paradigm, GENESIS_OP_DESTROY, 3, 0, true) != (uint64_t)-1)
+        kpanic("GENESIS-TEST: Failed to reject non-Genesis cap");
+
+    /* 3. Spawn & Registry Verification (Internal path prevents thread queuing) */
+    genesis_spawn_req_t req = { .module_index = 0, .out_pagetable_slot = 2 };
+    int new_pid = (int)genesis_syscall_dispatch(paradigm, GENESIS_OP_SPAWN, 1, (uint64_t)&req, true);
+    if (new_pid <= 1 || !process_find_by_pid((uint32_t)new_pid))
+        kpanic("GENESIS-TEST: Spawn or Registry failed");
+    kprintf("[GENESIS] sys_genesis_invoke: SPAWN PID %d found in registry.\n", new_pid);
+
+    /* 4. Cleanup Verification */
+    process_destroy(process_find_by_pid((uint32_t)new_pid));
+    if (process_find_by_pid((uint32_t)new_pid)) kpanic("GENESIS-TEST: Cleanup failed");
+
+    /* 5. Exhaustion via Dispatch Path */
+    if (genesis_syscall_dispatch(paradigm, GENESIS_OP_DESTROY, 1, 0, true) != 0)
+        kpanic("GENESIS-TEST: Exhaustion failed");
+
+    /* 6. Post-Exhaustion Syscall Path Rejection */
+    if (genesis_syscall_dispatch(paradigm, GENESIS_OP_SPAWN, 1, (uint64_t)&req, true) != (uint64_t)-1)
+        kpanic("GENESIS-TEST: Post-exhaustion call accepted");
+    kprintf("[GENESIS] sys_genesis_invoke: Post-exhaustion call REJECTED.\n");
+
+    /* 7. Registry Persistence */
+    if (!process_find_by_pid(pid)) kpanic("GENESIS-TEST: Registry corrupted");
+
+    kprintf("[GENESIS] sys_genesis_invoke: PASS\n");
+}
+
+
 static void test_interrupt_gatekeeper(void) {
     kprintf("[TEST] Day 8 Gatekeeper redesign validation...\n");
 
@@ -1544,6 +1589,7 @@ void kernel_main(void) {
 
     // Day 15: The Genesis Bridge
     genesis_bridge_spawn();
+    test_genesis_lifecycle();
 
     klog_emit_silence_report();
     

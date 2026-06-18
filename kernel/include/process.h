@@ -62,4 +62,9 @@ int process_detach_lattice(process_t* proc, lattice_t* lattice, uint64_t vaddr);
  */
 void process_destroy(process_t* process);
 
+/**
+ * process_find_by_pid: Lookup a live process by PID.
+ */
+process_t* process_find_by_pid(uint32_t pid);
+
 #endif /* REAPER_PROCESS_H */

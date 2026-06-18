@@ -19,6 +19,9 @@ static slab_cache_t* identity_cache = NULL;
 /* Global Authority Epoch (The Universe Clock) */
 static volatile uint64_t global_revocation_epoch = 1;
 
+/* Genesis Authority exhaustion flag */
+static volatile bool g_genesis_exhausted = false;
+
 /* Global lock for lineage tree structural changes */
 static spinlock_t lineage_lock = 0;
 static spinlock_t cap_metrics_lock = 0;
@@ -66,6 +69,20 @@ void cap_reset_metrics(void) {
     uint64_t flags = spinlock_irqsave(&cap_metrics_lock);
     fast_zero(&cap_metrics, sizeof(cap_metrics_t));
     spinlock_irqrestore(&cap_metrics_lock, flags);
+}
+
+bool cap_genesis_is_exhausted(void) {
+    return __atomic_load_n(&g_genesis_exhausted, __ATOMIC_ACQUIRE);
+}
+
+bool cap_genesis_exhaust(void) {
+    bool expected = false;
+    return __atomic_compare_exchange_n(&g_genesis_exhausted,
+                                       &expected,
+                                       true,
+                                       false,
+                                       __ATOMIC_ACQ_REL,
+                                       __ATOMIC_ACQUIRE);
 }
 
 cap_identity_t* cap_identity_create(uint64_t obj, uint16_t type, uint16_t rights, uint32_t badge, uint8_t allowed_modes) {

@@ -21,6 +21,9 @@ typedef enum {
     CAP_TYPE_AUDITOR,  /* Fate String Auditing Authority */
     CAP_TYPE_SCHED_AUTH_ROOT,   /* Process scheduling root authority */
     CAP_TYPE_SCHED_AUTH_THREAD, /* Thread scheduling derived authority */
+    CAP_TYPE_REALITY_CTRL,      /* Reality control authority */
+    CAP_TYPE_AUDIT_WRITE,       /* Audit record emission authority */
+    CAP_TYPE_SCHED_AUTH,        /* Broad process-level scheduling authority */
     CAP_MAX_TYPES
 } cap_type_t;
 

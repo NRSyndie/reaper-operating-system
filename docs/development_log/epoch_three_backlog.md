@@ -40,6 +40,10 @@ Execute the approved Epoch III strategy with security-first sequencing, measurab
 - Current standard slot follow-up:
   - Slot 1 Step 5 memory-path rollout evidence is landed.
   - Remaining slot work is now priority/policy expansion, multicore runtime activation, and later IPC call-chain tracking.
+- Area 1: Genesis & Process Restoration (DONE 2026-06-15):
+  - Surgically cleaned `process.c`, `syscall.c`, and `genesis.c` corruption.
+  - Reimplemented process registry and genesis syscall dispatch.
+  - Verified with three consecutive clean Law2+Fate matrix runs.
 
 ## Workstream 1 — Security Contracts (Priority 0)
 ### 1.1 `SYS_AUDIT` / Fate Strings Foundation

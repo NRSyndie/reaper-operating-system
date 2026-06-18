@@ -13,47 +13,6 @@
 static uint32_t next_pid = 1;
 static slab_cache_t* process_cache = NULL;
 
-#define MAX_PROCESSES 64
-static process_t* process_registry[MAX_PROCESSES] = {0};
-static spinlock_t registry_lock = 0;
-
-static void process_register_live(process_t* proc) {
-    if (!proc) return;
-    uint64_t flags = spinlock_irqsave(&registry_lock);
-    for (int i = 0; i < MAX_PROCESSES; i++) {
-        if (process_registry[i] == NULL) {
-            process_registry[i] = proc;
-            break;
-        }
-    }
-    spinlock_irqrestore(&registry_lock, flags);
-}
-
-void process_unregister_live(process_t* proc) {
-    if (!proc) return;
-    uint64_t flags = spinlock_irqsave(&registry_lock);
-    for (int i = 0; i < MAX_PROCESSES; i++) {
-        if (process_registry[i] == proc) {
-            process_registry[i] = NULL;
-            break;
-        }
-    }
-    spinlock_irqrestore(&registry_lock, flags);
-}
-
-process_t* process_find_by_pid(uint32_t pid) {
-    process_t* found = NULL;
-    uint64_t flags = spinlock_irqsave(&registry_lock);
-    for (int i = 0; i < MAX_PROCESSES; i++) {
-        if (process_registry[i] && process_registry[i]->pid == pid) {
-            found = process_registry[i];
-            break;
-        }
-    }
-    spinlock_irqrestore(&registry_lock, flags);
-    return found;
-}
-
 process_t* process_create(uint64_t pml4, uint16_t pcid, cnode_t* cspace, mode_id_t mode) { // Updated signature
     if (!process_cache) {
         process_cache = slab_create_cache("ProcessCache", sizeof(process_t), 8);
@@ -69,7 +28,6 @@ process_t* process_create(uint64_t pml4, uint16_t pcid, cnode_t* cspace, mode_id
     p->pcid = pcid;
     p->cspace = cspace;
     p->pid = next_pid++;
-    kprintf("PROCESS: Assigned PID %u\n", p->pid);
     p->thread_count = 0;
     p->mode = mode; // Initialize new mode field
     p->waiter_thread = NULL;
@@ -87,7 +45,6 @@ process_t* process_create(uint64_t pml4, uint16_t pcid, cnode_t* cspace, mode_id
         p->lattices[i].vaddr = 0;
     }
 
-    process_register_live(p);
     klog_debug("PROCESS: Created PID %u (PML4: 0x%lx, PCID: %u, Mode: %d)", p->pid, p->pml4_phys, p->pcid, p->mode);
 
     return p;
@@ -161,6 +118,50 @@ int process_attach_lattice(process_t* proc, struct lattice* lattice, uint64_t va
 
         if (proc->lattices[i].lattice == NULL) {
             proc->lattices[i].lattice = lattice;
+            proc->lattices[i].vaddr = vaddr;
+            proc->lattices[i].page_count = lattice->page_count;
+            proc->lattices[i].is_source = is_source;
+            
+            lattice_ref(lattice);
+            mode_log_lattice_event(proc->pid, vaddr, lattice->page_count, is_source, true);
+            return 0;
+        }
+    }
+
+    return -1; // No slots
+}
+
+int process_detach_lattice(process_t* proc, struct lattice* lattice, uint64_t vaddr) {
+    if (!proc || !lattice) return -1;
+    if ((vaddr & (PAGE_SIZE - 1)) != 0) return -1;
+
+    for (int i = 0; i < MAX_PROCESS_LATTICES; i++) {
+        if (proc->lattices[i].lattice == lattice && proc->lattices[i].vaddr == vaddr) {
+            mode_log_lattice_event(proc->pid,
+                                   proc->lattices[i].vaddr,
+                                   proc->lattices[i].page_count,
+                                   proc->lattices[i].is_source,
+                                   false);
+
+            lattice_destroy(proc->lattices[i].lattice);
+            proc->lattices[i].lattice = NULL;
+            proc->lattices[i].vaddr = 0;
+            proc->lattices[i].page_count = 0;
+            proc->lattices[i].is_source = false;
+            return 0;
+        }
+    }
+
+    return -1;
+}
+         proc->lattices[i].page_count = 0;
+            proc->lattices[i].is_source = false;
+            return 0;
+        }
+    }
+
+    return -1;
+}
             proc->lattices[i].vaddr = vaddr;
             proc->lattices[i].page_count = lattice->page_count;
             proc->lattices[i].is_source = is_source;

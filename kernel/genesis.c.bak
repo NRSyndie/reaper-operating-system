@@ -32,7 +32,6 @@ extern char kernel_end[];
  * For now, we'll store it in a static variable since Genesis is a singleton event.
  */
 static uint64_t paradigm_entry_point = 0;
-static uint32_t paradigm_pid = 0;
 
 static void paradigm_entry_stub(void) {
     entry_pipeline_run(scheduler_get_current(), paradigm_entry_point, GENESIS_DEFAULT_STACK_TOP);
@@ -244,7 +243,6 @@ void genesis_bridge_spawn(void) {
         }
 
         paradigm_entry_point = result.entry_point;
-        paradigm_pid = result.process->pid;
     }
 
     kprintf("[TEST] Day 15 Genesis Capability Injection: SUCCESS.\n");
@@ -253,69 +251,5 @@ void genesis_bridge_spawn(void) {
 
     kprintf("[GENESIS] Paradigm soul forged and queued. C-Slot 1: GENESIS_CAP.\n");
 }
-
-uint32_t genesis_get_paradigm_pid(void) {
-    return paradigm_pid;
-}
-
-uint64_t genesis_syscall_dispatch(process_t* owner, uint32_t op, uint32_t cap_slot, uint64_t req_ptr, bool is_kernel) {
-    if (!owner || !owner->cspace) return (uint64_t)-1;
-    if (cap_genesis_is_exhausted()) return (uint64_t)-1;
-
-    /* 1. Validate the Genesis Capability */
-    cap_identity_t* ident = cap_lookup(owner->cspace, cap_slot);
-    if (!ident || ident->type != CAP_TYPE_GENESIS) return (uint64_t)-1;
-
-    switch (op) {
-        case GENESIS_OP_SPAWN: {
-            genesis_spawn_req_t req;
-            if (is_kernel) {
-                memcpy(&req, (void*)req_ptr, sizeof(req));
-            } else {
-                // In a real implementation, we would use copy_from_user
-                // For now, since this is called from main.c with is_kernel=true, 
-                // we'll just support the kernel path for the test.
-                return (uint64_t)-1;
-            }
-
-            if (!module_request.response || req.module_index >= module_request.response->module_count) {
-                return (uint64_t)-1;
-            }
-
-            struct limine_file* module = module_request.response->modules[req.module_index];
-            genesis_initial_caps_t caps = {
-                .genesis_cap_slot = 1,
-                .pagetable_slot = req.out_pagetable_slot,
-                .ram_slot = 3,
-                .audit_slot = 4,
-                .sched_root_slot = 5,
-                .sched_thread_slot = 6
-            };
-            genesis_spawn_result_t result;
-
-            if (genesis_spawn_process_from_module(module,
-                                                  MODE_CASUAL,
-                                                  PARADIGM_STACK_TOP,
-                                                  PARADIGM_STACK_PAGES,
-                                                  &caps,
-                                                  true,
-                                                  false, // Internal spawn: don't queue yet
-                                                  &result) != 0) {
-                return (uint64_t)-1;
-            }
-
-            return (uint64_t)result.process->pid;
-        }
-
-        case GENESIS_OP_DESTROY: {
-            if (cap_genesis_exhaust()) {
-                kprintf("[GENESIS] Authority exhausted. The Bridge is closed.\n");
-                return 0;
-            }
-            return (uint64_t)-1;
-        }
-
-        default:
-            return (uint64_t)-1;
-    }
+n");
 }

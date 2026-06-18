@@ -29,6 +29,9 @@ typedef enum {
     CAP_TYPE_AUDITOR,  /* Fate String Auditing Authority */
     CAP_TYPE_SCHED_AUTH_ROOT,   /* Process scheduling root authority */
     CAP_TYPE_SCHED_AUTH_THREAD, /* Thread scheduling derived authority */
+    CAP_TYPE_REALITY_CTRL,      /* Reality control authority */
+    CAP_TYPE_AUDIT_WRITE,       /* Audit record emission authority */
+    CAP_TYPE_SCHED_AUTH,        /* Broad process-level scheduling authority */
     CAP_MAX_TYPES
 } cap_type_t;
 
@@ -197,5 +200,7 @@ void cap_reaper(void);
 void cap_identity_free(cap_identity_t* ident);
 bool cap_get_metrics(cap_metrics_t* out_metrics);
 void cap_reset_metrics(void);
+bool cap_genesis_is_exhausted(void);
+bool cap_genesis_exhaust(void);
 
 #endif /* REAPER_CAPABILITY_H */
