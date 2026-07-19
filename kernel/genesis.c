@@ -34,6 +34,34 @@ extern char kernel_end[];
 static uint64_t paradigm_entry_point = 0;
 static uint32_t paradigm_pid = 0;
 
+/*
+ * genesis_copy_from_user: local safe-copy from user address space.
+ * Mirrors syscall.c's copy_from_user; duplicated here to keep genesis.c
+ * a self-contained compilation unit without polluting the kernel ABI
+ * with an exported copy_from_user symbol.
+ */
+#define USER_VA_LIMIT 0x0000800000000000ULL
+static bool genesis_copy_from_user(void* dest, const void* src, size_t n) {
+    if (n == 0) { return true; }
+    if ((uint64_t)src >= USER_VA_LIMIT) return false;
+    if (n > USER_VA_LIMIT || (uint64_t)src + n > USER_VA_LIMIT) return false;
+    memcpy(dest, src, n);
+    return true;
+}
+
+/*
+ * genesis_is_delegatable_type: whitelist of cap types Genesis authority
+ * may inject directly into a target process's cspace, bypassing the
+ * caller's own possession of that authority.  All other types must go
+ * through the normal cap_mint / SYS_CAP_MINT path.
+ */
+static bool genesis_is_delegatable_type(cap_type_t t) {
+    return t == CAP_TYPE_REALITY_CTRL   ||
+           t == CAP_TYPE_AUDIT_WRITE    ||
+           t == CAP_TYPE_SCHED_AUTH     ||
+           t == CAP_TYPE_SCHED_AUTH_ROOT;
+}
+
 static void paradigm_entry_stub(void) {
     entry_pipeline_run(scheduler_get_current(), paradigm_entry_point, GENESIS_DEFAULT_STACK_TOP);
 }
@@ -69,10 +97,17 @@ int genesis_inject_initial_caps(process_t* proc, const genesis_initial_caps_t* c
 
     if (!proc || !proc->cspace || !caps) return -1;
 
-    ident = cap_identity_create(0, CAP_TYPE_GENESIS, 0xFFFF, 0xDEADBEEF, CAP_MODE_ALL);
-    if (!ident || cap_insert(proc->cspace, caps->genesis_cap_slot, ident) != 0) {
-        if (ident) cap_identity_free(ident);
-        return -1;
+    /* genesis_cap_slot == 0 is the sentinel meaning "do NOT inject a Genesis
+     * capability".  Processes spawned via GENESIS_OP_SPAWN must not inherit
+     * Genesis authority automatically; that authority must be delegated
+     * explicitly via GENESIS_OP_DELEGATE.  Only genesis_bridge_spawn (the
+     * primordial Paradigm boot) passes slot != 0. */
+    if (caps->genesis_cap_slot != 0) {
+        ident = cap_identity_create(0, CAP_TYPE_GENESIS, 0xFFFF, 0xDEADBEEF, CAP_MODE_ALL);
+        if (!ident || cap_insert(proc->cspace, caps->genesis_cap_slot, ident) != 0) {
+            if (ident) cap_identity_free(ident);
+            return -1;
+        }
     }
 
     ident = cap_identity_create(proc->pml4_phys,
@@ -258,55 +293,99 @@ uint32_t genesis_get_paradigm_pid(void) {
     return paradigm_pid;
 }
 
-uint64_t genesis_syscall_dispatch(process_t* owner, uint32_t op, uint32_t cap_slot, uint64_t req_ptr, bool is_kernel) {
+uint64_t genesis_syscall_dispatch(process_t* owner, uint32_t op, uint32_t cap_slot,
+                                   uint64_t req_ptr, bool is_kernel) {
     if (!owner || !owner->cspace) return (uint64_t)-1;
-    if (cap_genesis_is_exhausted()) return (uint64_t)-1;
+    if (cap_genesis_is_exhausted())  return (uint64_t)-1;
 
-    /* 1. Validate the Genesis Capability */
+    /* Validate the Genesis Capability in the caller's cspace. */
     cap_identity_t* ident = cap_lookup(owner->cspace, cap_slot);
     if (!ident || ident->type != CAP_TYPE_GENESIS) return (uint64_t)-1;
 
     switch (op) {
+
+        /* ------------------------------------------------------------------ */
         case GENESIS_OP_SPAWN: {
             genesis_spawn_req_t req;
             if (is_kernel) {
                 memcpy(&req, (void*)req_ptr, sizeof(req));
             } else {
-                // In a real implementation, we would use copy_from_user
-                // For now, since this is called from main.c with is_kernel=true, 
-                // we'll just support the kernel path for the test.
-                return (uint64_t)-1;
+                if (!genesis_copy_from_user(&req, (const void*)req_ptr, sizeof(req)))
+                    return (uint64_t)-1;
             }
 
-            if (!module_request.response || req.module_index >= module_request.response->module_count) {
+            if (!module_request.response ||
+                req.module_index >= module_request.response->module_count)
                 return (uint64_t)-1;
-            }
 
-            struct limine_file* module = module_request.response->modules[req.module_index];
+            struct limine_file* module =
+                module_request.response->modules[req.module_index];
+
             genesis_initial_caps_t caps = {
-                .genesis_cap_slot = 1,
-                .pagetable_slot = req.out_pagetable_slot,
-                .ram_slot = 3,
-                .audit_slot = 4,
-                .sched_root_slot = 5,
-                .sched_thread_slot = 6
+                /* genesis_cap_slot = 0: spawned daemons do NOT inherit Genesis
+                 * authority — it must be delegated explicitly via
+                 * GENESIS_OP_DELEGATE.  genesis_inject_initial_caps skips the
+                 * Genesis cap injection when this field is 0. */
+                .genesis_cap_slot  = 0,
+                .pagetable_slot    = req.out_pagetable_slot,
+                /* TODO: expose ram_slot and audit_slot in genesis_spawn_req_t
+                 * when bootinfo v2 lands.  Area 3 is the right time. */
+                .ram_slot          = 3,
+                .audit_slot        = 4,
+                .sched_root_slot   = req.out_sched_root_slot,
+                .sched_thread_slot = req.out_sched_thread_slot,
             };
             genesis_spawn_result_t result;
 
-            if (genesis_spawn_process_from_module(module,
-                                                  MODE_CASUAL,
+            /* Use owner->mode, not MODE_CASUAL: the spawned process inherits
+             * the caller's security envelope. */
+            if (genesis_spawn_process_from_module(module, owner->mode,
                                                   PARADIGM_STACK_TOP,
                                                   PARADIGM_STACK_PAGES,
-                                                  &caps,
-                                                  true,
-                                                  false, // Internal spawn: don't queue yet
-                                                  &result) != 0) {
+                                                  &caps, true,
+                                                  false, /* don't queue yet */
+                                                  &result) != 0)
                 return (uint64_t)-1;
-            }
 
             return (uint64_t)result.process->pid;
         }
 
+        /* ------------------------------------------------------------------ */
+        case GENESIS_OP_DELEGATE: {
+            genesis_delegate_req_t req;
+            if (is_kernel) {
+                memcpy(&req, (void*)req_ptr, sizeof(req));
+            } else {
+                if (!genesis_copy_from_user(&req, (const void*)req_ptr, sizeof(req)))
+                    return (uint64_t)-1;
+            }
+
+            /* Whitelist: only four types may bypass the normal cap_mint path. */
+            if (!genesis_is_delegatable_type((cap_type_t)req.cap_type))
+                return (uint64_t)-1;
+
+            process_t* target = process_find_by_pid(req.target_pid);
+            if (!target || !target->cspace)
+                return (uint64_t)-1;
+
+            cap_identity_t* new_ident = cap_identity_create(
+                req.object_ptr,
+                (uint16_t)req.cap_type,
+                req.cap_rights,
+                req.badge,
+                req.allowed_modes
+            );
+            if (!new_ident) return (uint64_t)-1;
+
+            if (cap_insert(target->cspace, req.target_slot, new_ident) != 0) {
+                cap_identity_free(new_ident);
+                return (uint64_t)-1;
+            }
+
+            return 0;
+        }
+
+        /* ------------------------------------------------------------------ */
         case GENESIS_OP_DESTROY: {
             if (cap_genesis_exhaust()) {
                 kprintf("[GENESIS] Authority exhausted. The Bridge is closed.\n");

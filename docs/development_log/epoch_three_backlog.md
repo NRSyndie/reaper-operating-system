@@ -40,10 +40,19 @@ Execute the approved Epoch III strategy with security-first sequencing, measurab
 - Current standard slot follow-up:
   - Slot 1 Step 5 memory-path rollout evidence is landed.
   - Remaining slot work is now priority/policy expansion, multicore runtime activation, and later IPC call-chain tracking.
-- Area 1: Genesis & Process Restoration (DONE 2026-06-15):
+- Area 1: Genesis & Process Restoration — Phase 1 (DONE 2026-06-15):
   - Surgically cleaned `process.c`, `syscall.c`, and `genesis.c` corruption.
-  - Reimplemented process registry and genesis syscall dispatch.
+  - Reimplemented process registry (`process_find_by_pid`, `process_register_live`, `process_unregister_live`) with spinlock protection.
+  - Restored `genesis_syscall_dispatch` with `GENESIS_OP_SPAWN` and `GENESIS_OP_DESTROY`.
+  - Added `cap_genesis_is_exhausted` and `cap_genesis_exhaust` atomic one-way flag in `capability.c`.
   - Verified with three consecutive clean Law2+Fate matrix runs.
+- Area 1: Genesis Syscall Dispatch Closure — Phase 2 (DONE 2026-07-19):
+  - Added `GENESIS_OP_DELEGATE` case with four-type whitelist (`genesis_is_delegatable_type`), `process_find_by_pid` lookup, direct `cap_identity_create` + `cap_insert` into target cspace, and dual kernel/userspace (`genesis_copy_from_user`) copy paths.
+  - Fixed `GENESIS_OP_SPAWN` userspace path: replaced stub `return -1` with `genesis_copy_from_user`.
+  - Fixed `GENESIS_OP_SPAWN` caps struct: `genesis_cap_slot = 0` (no Genesis authority on spawn), `out_sched_root_slot` and `out_sched_thread_slot` from request fields, `owner->mode` replaces `MODE_CASUAL`.
+  - Added `genesis_inject_initial_caps` guard: `genesis_cap_slot == 0` skips Genesis cap injection.
+  - Extended `test_genesis_lifecycle` to 8 steps: Step 3b delegates `CAP_TYPE_REALITY_CTRL` to spawned process, verifies via `cap_lookup`, then verifies `CAP_TYPE_RAM` is rejected by whitelist.
+  - Verified with headless boot serial evidence and `make -C kernel verify_matrix` 3/3 PASS.
 
 ## Workstream 1 — Security Contracts (Priority 0)
 ### 1.1 `SYS_AUDIT` / Fate Strings Foundation

@@ -530,7 +530,7 @@ static void test_recursive_revocation(void) {
 }
 
 static void test_genesis_lifecycle(void) {
-    kprintf("[TEST] Genesis Lifecycle validation (7 Steps)...\n");
+    kprintf("[TEST] Genesis Lifecycle validation (8 Steps)...\n");
     uint32_t pid = genesis_get_paradigm_pid();
     process_t* paradigm = process_find_by_pid(pid);
     if (!paradigm) {
@@ -548,11 +548,60 @@ static void test_genesis_lifecycle(void) {
         kpanic("GENESIS-TEST: Failed to reject non-Genesis cap");
 
     /* 3. Spawn & Registry Verification (Internal path prevents thread queuing) */
-    genesis_spawn_req_t req = { .module_index = 0, .out_pagetable_slot = 2 };
+    genesis_spawn_req_t req = {
+        .module_index          = 0,
+        .out_pagetable_slot    = 2,
+        .out_sched_root_slot   = 5,
+        .out_sched_thread_slot = 6,
+    };
     int new_pid = (int)genesis_syscall_dispatch(paradigm, GENESIS_OP_SPAWN, 1, (uint64_t)&req, true);
     if (new_pid <= 1 || !process_find_by_pid((uint32_t)new_pid))
         kpanic("GENESIS-TEST: Spawn or Registry failed");
     kprintf("[GENESIS] sys_genesis_invoke: SPAWN PID %d found in registry.\n", new_pid);
+
+    /* 3b. DELEGATE — mint a CAP_TYPE_REALITY_CTRL directly into the spawned
+     *     process's slot 10.  The owner (Paradigm) does NOT need to possess a
+     *     REALITY_CTRL cap; Genesis authority bypasses that requirement.
+     *     We then verify the cap lands in the target cspace via cap_lookup and
+     *     confirm the badge matches.  Also verify the whitelist rejects
+     *     CAP_TYPE_RAM (not on the delegatable list). */
+    {
+        genesis_delegate_req_t dreq = {
+            .target_pid    = (uint32_t)new_pid,
+            .target_slot   = 10,
+            .cap_type      = CAP_TYPE_REALITY_CTRL,
+            .cap_rights    = CAP_RIGHT_READ | CAP_RIGHT_WRITE,
+            .badge         = 0xDA7A,
+            .object_ptr    = 0xCAFEBABE,
+            .allowed_modes = CAP_MODE_ALL,
+        };
+        if (genesis_syscall_dispatch(
+                paradigm, GENESIS_OP_DELEGATE, 1,
+                (uint64_t)&dreq, true) != 0)
+            kpanic("GENESIS-TEST: DELEGATE failed");
+
+        process_t* target = process_find_by_pid((uint32_t)new_pid);
+        cap_identity_t* delegated = cap_lookup(target->cspace, 10);
+        if (!delegated || delegated->type != CAP_TYPE_REALITY_CTRL ||
+            delegated->badge != 0xDA7A)
+            kpanic("GENESIS-TEST: Delegated cap not found or wrong in target cspace");
+
+        /* Negative path: CAP_TYPE_RAM must be rejected by the whitelist. */
+        genesis_delegate_req_t bad_dreq = {
+            .target_pid    = (uint32_t)new_pid,
+            .target_slot   = 11,
+            .cap_type      = CAP_TYPE_RAM,
+            .cap_rights    = CAP_RIGHT_READ,
+            .badge         = 0,
+            .object_ptr    = 0,
+            .allowed_modes = CAP_MODE_ALL,
+        };
+        if (genesis_syscall_dispatch(
+                paradigm, GENESIS_OP_DELEGATE, 1,
+                (uint64_t)&bad_dreq, true) != (uint64_t)-1)
+            kpanic("GENESIS-TEST: DELEGATE accepted non-whitelisted type CAP_TYPE_RAM");
+    }
+    kprintf("[GENESIS] sys_genesis_invoke: DELEGATE to PID %d PASSED.\n", new_pid);
 
     /* 4. Cleanup Verification */
     process_destroy(process_find_by_pid((uint32_t)new_pid));
@@ -572,6 +621,7 @@ static void test_genesis_lifecycle(void) {
 
     kprintf("[GENESIS] sys_genesis_invoke: PASS\n");
 }
+
 
 
 static void test_interrupt_gatekeeper(void) {
