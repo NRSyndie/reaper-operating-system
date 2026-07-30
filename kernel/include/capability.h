@@ -201,6 +201,8 @@ void cap_identity_free(cap_identity_t* ident);
 bool cap_get_metrics(cap_metrics_t* out_metrics);
 void cap_reset_metrics(void);
 bool cap_genesis_is_exhausted(void);
-bool cap_genesis_exhaust(void);
+bool process_has_capability_at(const void* proc, uint32_t slot, cap_type_t expected_type, uint16_t required_rights);
 
 #endif /* REAPER_CAPABILITY_H */
+
+

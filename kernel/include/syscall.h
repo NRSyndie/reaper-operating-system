@@ -68,4 +68,16 @@ bool syscall_self_test(void);
 bool syscall_get_metrics(syscall_metrics_t* out_metrics);
 void syscall_reset_metrics(void);
 
+#include "mode.h"
+#include "process.h"
+
+uint64_t sys_mode_query_handler(process_t* owner, uint32_t cap_slot);
+uint64_t sys_sched_auth_root_mint_handler(process_t* owner,
+                                           uint32_t auth_cap_slot,
+                                           mode_id_t mode_binding,
+                                           uint64_t max_total_budget,
+                                           uint64_t refill_period_ticks,
+                                           uint32_t dst_slot);
+
 #endif /* REAPER_SYSCALL_H */
+

@@ -768,11 +768,54 @@ uint64_t ipc_invoke_endpoint(cap_identity_t* ident, uint64_t a0, uint64_t a1, ui
     }
 }
 
+/*
+ * SCHED_AUTH_MAX_ACCUMULATED_MULTIPLIER:
+ * Fixed kernel policy constant for SYS_SCHED_AUTH_ROOT_MINT.
+ * Defines the maximum accumulated budget ceiling as 4x max_total_budget
+ * to bound refill accumulation window, matching Genesis initialization policy.
+ */
+#define SCHED_AUTH_MAX_ACCUMULATED_MULTIPLIER 4ULL
+
+uint64_t sys_mode_query_handler(process_t* owner, uint32_t cap_slot) {
+    if (process_has_capability_at(owner, cap_slot, CAP_TYPE_REALITY_CTRL, CAP_RIGHT_READ)) {
+        return (uint64_t)mode_get_current();
+    }
+    /* Redacted for occupants: "The Architect is pleased." */
+    return (uint64_t)MODE_CASUAL;
+}
+
+uint64_t sys_sched_auth_root_mint_handler(process_t* owner,
+                                           uint32_t auth_cap_slot,
+                                           mode_id_t mode_binding,
+                                           uint64_t max_total_budget,
+                                           uint64_t refill_period_ticks,
+                                           uint32_t dst_slot) {
+    if (!owner || !owner->cspace) {
+        g_sys_metrics.ownerless_rejects++;
+        return (uint64_t)-1;
+    }
+
+    /* Privileged minting: Gated on CAP_TYPE_REALITY_CTRL with CAP_RIGHT_GRANT at presented slot. */
+    if (!process_has_capability_at(owner, auth_cap_slot, CAP_TYPE_REALITY_CTRL, CAP_RIGHT_GRANT)) {
+        g_sys_metrics.perm_rejects++;
+        return (uint64_t)-1;
+    }
+
+    uint64_t max_accumulated = max_total_budget * SCHED_AUTH_MAX_ACCUMULATED_MULTIPLIER;
+    return (scheduler_mint_root_auth(owner,
+                                    dst_slot,
+                                    mode_binding,
+                                    max_total_budget,
+                                    refill_period_ticks,
+                                    max_accumulated) == 0) ? 0 : (uint64_t)-1;
+}
+
 /**
  * syscall_dispatcher: The C-side handler for the Void Gate.
  * Called from assembly with user registers.
  */
 uint64_t syscall_dispatcher(uint64_t num, uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) {
+
     g_sys_metrics.total_calls++;
     if (num < (sizeof(g_sys_percall) / sizeof(g_sys_percall[0]))) {
         g_sys_percall[num]++;
@@ -841,13 +884,9 @@ uint64_t syscall_dispatcher(uint64_t num, uint64_t a0, uint64_t a1, uint64_t a2,
         }
 
         case SYS_MODE_QUERY:
-            if (owner && owner->pid == 1) {
-                ret = (uint64_t)mode_get_current();
-            } else {
-                /* Redacted for occupants: "The Architect is pleased." */
-                ret = (uint64_t)MODE_CASUAL;
-            }
+            ret = sys_mode_query_handler(owner, (uint32_t)a0);
             break;
+
 
         case SYS_MODE_TRANSITION:
             if (a0 < MODE_CASUAL || a0 > MODE_GHOST) {
@@ -1436,34 +1475,15 @@ uint64_t syscall_dispatcher(uint64_t num, uint64_t a0, uint64_t a1, uint64_t a2,
             break;
         }
 
-        case SYS_SCHED_AUTH_ROOT_MINT: {
-            mode_id_t mode_binding = (mode_id_t)a0;
-            uint64_t max_total_budget = a1;
-            uint64_t refill_period_ticks = a2;
-            uint64_t max_accumulated = a3;
-            uint32_t dst_slot = (uint32_t)a4;
-
-            if (!owner || !owner->cspace) {
-                g_sys_metrics.ownerless_rejects++;
-                ret = (uint64_t)-1;
-                break;
-            }
-
-            /* Privileged minting: Paradigm/root authority process only. */
-            if (owner->pid != 1) {
-                g_sys_metrics.perm_rejects++;
-                ret = (uint64_t)-1;
-                break;
-            }
-
-            ret = (scheduler_mint_root_auth(owner,
-                                            dst_slot,
-                                            mode_binding,
-                                            max_total_budget,
-                                            refill_period_ticks,
-                                            max_accumulated) == 0) ? 0 : (uint64_t)-1;
+        case SYS_SCHED_AUTH_ROOT_MINT:
+            ret = sys_sched_auth_root_mint_handler(owner,
+                                                    (uint32_t)a0,
+                                                    (mode_id_t)a1,
+                                                    a2,
+                                                    a3,
+                                                    (uint32_t)a4);
             break;
-        }
+
 
         case SYS_SCHED_AUTH_THREAD_DERIVE: {
             uint32_t root_slot = (uint32_t)a0;

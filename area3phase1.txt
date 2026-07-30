@@ -1,0 +1,115 @@
+We are implementing Area 3: Bootinfo v2 — Phase 1: Header Definitions. This phase is about defining the Bootinfo v2 struct identically in both kernel and shared headers. No code is to be written yet — we need a detailed plan of exactly what changes will be made, why, and how they will be validated.
+
+---
+
+## Context
+
+### What Bootinfo v1 Looks Like Today
+
+The current `bootinfo_t` struct (in both `kernel/include/bootinfo.h` and `shared/include/bootinfo.h`) is:
+
+```c
+typedef struct boot_info {
+    uint64_t magic;
+    uint64_t version;
+    uint64_t hhdm_offset;
+    uint64_t genesis_cap_slot;
+    uint64_t memmap_base;
+    uint64_t memmap_count;
+    uint64_t kernel_phys_start;
+    uint64_t kernel_phys_end;
+    uint64_t reserved[8];
+} boot_info_t;
+```
+
+**Key properties:**
+- Magic is `0x5245415045524F53` (`"REAPEROS"`)
+- Version is currently `1`
+- The struct is exactly 128 bytes (8 × 8 = 64 bytes for the first 8 fields, + 64 bytes for reserved)
+- Paradigm reads it at virtual address `0x1000`
+- Paradigm checks: magic, version == 1, genesis_cap_slot == 1, kernel_end > kernel_start
+
+### What We Need Bootinfo v2 to Add
+
+**Requirements:**
+1. Preserve all existing fields at their current offsets (ABI compatibility)
+2. Bump `BOOTINFO_VERSION` from 1 to 2
+3. Add a module table — an array of descriptors, each containing:
+   - Module index
+   - Physical base address
+   - Size in bytes
+   - ELF entry point (if applicable)
+   - Module type (explicit, not order-dependent)
+   - Module flags
+   - BLAKE3 hash of module content
+   - Module name (optional, for debugging)
+4. Add framebuffer metadata:
+   - Physical base address
+   - Width
+   - Height
+   - Pitch
+   - Pixel format
+   - A presence flag (framebuffer is optional)
+5. Add an integrity field — BLAKE3 hash of the struct itself (excluding this field)
+6. Add a flags field (for presence flags, future expansion)
+
+**Key design decisions from our planning:**
+- Fixed-size module table with 16 entries
+- Module type is explicit (not order-dependent)
+- Framebuffer metadata is optional (absence is not a failure)
+- No `packed` attribute; use natural alignment and verify with static assertions
+- Static assertions go in dedicated verification files, not in the shared header
+
+### Constraints
+- All existing fields must remain at the same offsets
+- The struct must remain naturally aligned (no `packed`)
+- Both `kernel/include/bootinfo.h` and `shared/include/bootinfo.h` must be identical
+- The header should be clean and focused on the interface (no static assertions)
+
+---
+
+## Your Task
+
+Describe in detail what the new Bootinfo v2 headers will look like.
+
+### What I Need to Know
+
+1. **The complete `bootinfo_t` struct definition:**
+   - What are the exact fields, their types, and their order?
+   - What are the exact offsets of each field?
+   - How much total space does the struct occupy?
+   - What is the offset of the module table?
+
+2. **The `boot_module_t` struct definition:**
+   - What are the exact fields, their types, and their order?
+   - What is the total size of each entry?
+   - What are the field offsets?
+
+3. **All constants and enums:**
+   - `BOOTINFO_MAGIC` value (unchanged)
+   - `BOOTINFO_VERSION` new value
+   - Module type constants
+   - Module flag constants
+   - Bootinfo flag constants
+   - Pixel format constants
+
+4. **The layout verification plan:**
+   - Where will the `static_assert` checks live?
+   - What exact properties will be checked?
+   - How will we ensure kernel and shared headers remain identical?
+
+5. **The ABI compatibility story:**
+   - How is the v1 layout preserved?
+   - What happens if someone reads the struct with v1 headers?
+   - What happens if someone reads the struct with v2 headers?
+
+6. **Any open questions or trade-offs:**
+   - What decisions are still uncertain?
+   - What alternatives were considered?
+   - What should we be careful about?
+
+---
+
+## Deliverable
+
+I need a clear, detailed explanation of the header changes you will make, including the actual struct definitions, constants, and the reasoning behind each design decision. Think of this as the design document for Phase 1 — the code will come after we agree on this plan.

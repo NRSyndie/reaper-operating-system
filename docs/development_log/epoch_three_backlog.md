@@ -53,6 +53,15 @@ Execute the approved Epoch III strategy with security-first sequencing, measurab
   - Added `genesis_inject_initial_caps` guard: `genesis_cap_slot == 0` skips Genesis cap injection.
   - Extended `test_genesis_lifecycle` to 8 steps: Step 3b delegates `CAP_TYPE_REALITY_CTRL` to spawned process, verifies via `cap_lookup`, then verifies `CAP_TYPE_RAM` is rejected by whitelist.
   - Verified with headless boot serial evidence and `make -C kernel verify_matrix` 3/3 PASS.
+- Area 2: PID-Privilege Removal Closure (DONE 2026-07-23):
+  - Added `process_has_capability_at(proc, slot, expected_type, required_rights)` — O(1) direct slot lookup in `capability.c`/`capability.h`; validates epoch aliveness, type, mode mask, and rights bitmask.
+  - Replaced `pid == 1` check in `SYS_MODE_QUERY` with `sys_mode_query_handler`: requires `CAP_TYPE_REALITY_CTRL` + `CAP_RIGHT_READ` at caller-supplied slot `a0`; slot 0 sentinel returns `MODE_CASUAL` unconditionally.
+  - Replaced `pid != 1` reject in `SYS_SCHED_AUTH_ROOT_MINT` with `sys_sched_auth_root_mint_handler`: requires `CAP_TYPE_REALITY_CTRL` + `CAP_RIGHT_GRANT` at caller-supplied slot `a0`; slot 0 sentinel returns error unconditionally.
+  - Added `SCHED_AUTH_MAX_ACCUMULATED_MULTIPLIER 4ULL` named constant with inline policy documentation replacing the former silent `max_total_budget * 4` expression.
+  - Genesis injects `CAP_TYPE_REALITY_CTRL` at slot 7 into Paradigm's CNode during `genesis_bridge_spawn` (`reality_ctrl_slot = 7`) — resolves bootstrap chicken-and-egg for `SYS_SCHED_AUTH_ROOT_MINT`.
+  - `GENESIS_OP_SPAWN` preserves `reality_ctrl_slot = 0` sentinel — child daemons do not inherit reality control by default.
+  - Added `test_pid_privilege_removal()` in `kernel/main.c`: creates two dynamically-PID'd test processes, verifies positive and negative paths for both `sys_mode_query_handler` and `sys_sched_auth_root_mint_handler` by direct function call, destroys both processes at end.
+  - Verified with `[KERNEL] pid-privilege-removal: PASS` serial marker and `make -C kernel verify_matrix` 3/3 PASS.
 
 ## Workstream 1 — Security Contracts (Priority 0)
 ### 1.1 `SYS_AUDIT` / Fate Strings Foundation

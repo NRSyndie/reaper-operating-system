@@ -622,6 +622,63 @@ static void test_genesis_lifecycle(void) {
     kprintf("[GENESIS] sys_genesis_invoke: PASS\n");
 }
 
+static void test_pid_privilege_removal(void) {
+    kprintf("[TEST] Starting PID Privilege Removal self-test...\n");
+
+    uint64_t pml4_a = vmm_fork_pml4();
+    uint64_t pml4_b = vmm_fork_pml4();
+    cnode_t* cspace_a = cnode_create();
+    cnode_t* cspace_b = cnode_create();
+
+    process_t* proc_authorized = process_create(pml4_a, 0, cspace_a, MODE_CASUAL);
+    process_t* proc_unauthorized = process_create(pml4_b, 0, cspace_b, MODE_CASUAL);
+
+    if (!proc_authorized || !proc_unauthorized) {
+        kpanic("PID-PRIV-TEST: process_create failed");
+    }
+
+    /* Inject CAP_TYPE_REALITY_CTRL into proc_authorized at slot 7 */
+    cap_identity_t* rc_cap = cap_identity_create(0, CAP_TYPE_REALITY_CTRL,
+                                                  CAP_RIGHT_READ | CAP_RIGHT_WRITE | CAP_RIGHT_GRANT | CAP_RIGHT_INVOKE,
+                                                  0, CAP_MODE_ALL);
+    if (!rc_cap || cap_insert(proc_authorized->cspace, 7, rc_cap) != 0) {
+        kpanic("PID-PRIV-TEST: cap_insert failed");
+    }
+
+    /* 1. Test SYS_MODE_QUERY handler:
+     * - Authorized process presenting slot 7 gets real mode (mode_get_current())
+     * - Unauthorized process presenting slot 7 gets MODE_CASUAL
+     */
+    uint64_t mode_auth = sys_mode_query_handler(proc_authorized, 7);
+    uint64_t mode_unauth = sys_mode_query_handler(proc_unauthorized, 7);
+    if (mode_auth != (uint64_t)mode_get_current()) {
+        kpanic("PID-PRIV-TEST: SYS_MODE_QUERY authorized check failed");
+    }
+    if (mode_unauth != (uint64_t)MODE_CASUAL) {
+        kpanic("PID-PRIV-TEST: SYS_MODE_QUERY unauthorized check failed");
+    }
+
+    /* 2. Test SYS_SCHED_AUTH_ROOT_MINT handler:
+     * - Authorized process presenting slot 7 (CAP_RIGHT_GRANT) succeeds (returns 0)
+     * - Unauthorized process presenting slot 7 fails (returns -1)
+     */
+    uint64_t mint_auth = sys_sched_auth_root_mint_handler(proc_authorized, 7, MODE_CASUAL, 100, 10, 10);
+    uint64_t mint_unauth = sys_sched_auth_root_mint_handler(proc_unauthorized, 7, MODE_CASUAL, 100, 10, 10);
+    if (mint_auth != 0) {
+        kpanic("PID-PRIV-TEST: SYS_SCHED_AUTH_ROOT_MINT authorized check failed");
+    }
+    if (mint_unauth != (uint64_t)-1) {
+        kpanic("PID-PRIV-TEST: SYS_SCHED_AUTH_ROOT_MINT unauthorized check failed");
+    }
+
+
+    process_destroy(proc_authorized);
+    process_destroy(proc_unauthorized);
+
+    kprintf("[KERNEL] pid-privilege-removal: PASS\n");
+}
+
+
 
 
 static void test_interrupt_gatekeeper(void) {
@@ -1637,8 +1694,12 @@ void kernel_main(void) {
     // Day 13: The Invisible Context
     test_fpu_crucible();
 
+    // Area 2: PID Privilege Removal Validation
+    test_pid_privilege_removal();
+
     // Day 15: The Genesis Bridge
     genesis_bridge_spawn();
+
     test_genesis_lifecycle();
 
     klog_emit_silence_report();

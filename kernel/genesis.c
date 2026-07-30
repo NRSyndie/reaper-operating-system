@@ -138,8 +138,19 @@ int genesis_inject_initial_caps(process_t* proc, const genesis_initial_caps_t* c
         return -1;
     }
 
+    if (caps->reality_ctrl_slot != 0) {
+        ident = cap_identity_create(0, CAP_TYPE_REALITY_CTRL,
+                                    CAP_RIGHT_READ | CAP_RIGHT_WRITE | CAP_RIGHT_GRANT | CAP_RIGHT_INVOKE,
+                                    0, CAP_MODE_ALL);
+        if (!ident || cap_insert(proc->cspace, caps->reality_ctrl_slot, ident) != 0) {
+            if (ident) cap_identity_free(ident);
+            return -1;
+        }
+    }
+
     return 0;
 }
+
 
 int genesis_map_bootinfo(process_t* proc, uint64_t bootinfo_phys) {
     if (!proc || !bootinfo_phys) return -1;
@@ -262,8 +273,10 @@ void genesis_bridge_spawn(void) {
             .ram_slot = 3,
             .audit_slot = 4,
             .sched_root_slot = 5,
-            .sched_thread_slot = 6
+            .sched_thread_slot = 6,
+            .reality_ctrl_slot = 7
         };
+
         genesis_spawn_result_t result;
 
         if (genesis_spawn_process_from_module(module,
@@ -334,7 +347,9 @@ uint64_t genesis_syscall_dispatch(process_t* owner, uint32_t op, uint32_t cap_sl
                 .audit_slot        = 4,
                 .sched_root_slot   = req.out_sched_root_slot,
                 .sched_thread_slot = req.out_sched_thread_slot,
+                .reality_ctrl_slot = 0,
             };
+
             genesis_spawn_result_t result;
 
             /* Use owner->mode, not MODE_CASUAL: the spawned process inherits

@@ -17,7 +17,9 @@ typedef struct {
     uint32_t audit_slot;
     uint32_t sched_root_slot;
     uint32_t sched_thread_slot;
+    uint32_t reality_ctrl_slot;
 } genesis_initial_caps_t;
+
 
 typedef struct {
     process_t* process;

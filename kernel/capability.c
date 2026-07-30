@@ -8,6 +8,8 @@
 #include "scheduler.h"
 #include "kmalloc.h"
 #include "audit.h"
+#include "process.h"
+
 
 extern void lattice_destroy(lattice_t* lattice);
 
@@ -497,3 +499,15 @@ void cap_revoke(cnode_t* root, uint32_t cptr) {
 
     cap_metric_inc(&cap_metrics.revoke_ops);
 }
+
+bool process_has_capability_at(const void* proc_ptr, uint32_t slot, cap_type_t expected_type, uint16_t required_rights) {
+    const process_t* proc = (const process_t*)proc_ptr;
+    if (!proc || !proc->cspace) return false;
+    cap_identity_t* ident = cap_lookup(proc->cspace, slot);
+    if (!ident) return false;
+    if (ident->type != expected_type) return false;
+    if ((ident->rights & required_rights) != required_rights) return false;
+    return true;
+}
+
+

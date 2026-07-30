@@ -1,0 +1,43 @@
+🔍 One Thing To Note
+
+The pre-existing warning about cap_genesis_exhaust vs cap_genesis_is_exhausted in genesis.c:405 should be resolved before Area 3 closes. It's not caused by this work but it indicates a symbol name mismatch from the Area 1 implementation that could cause a real linker error if the warning ever becomes an error. Add it to the Phase 2 task list.
+
+
+
+Phase 1 is confirmed complete. Proceed to Phase 2. The Phase 2 scope is:
+
+1. Resolve the cap_genesis_exhaust warning in kernel/genesis.c:405 — check the actual function name in kernel/capability.c and align the call site.
+
+2. Populate v2 fields in kernel/genesis.c:
+
+
+
+
+
+flags — set BOOTINFO_FLAG_FRAMEBUFFER | BOOTINFO_FLAG_MODULE_TABLE
+
+
+
+module_count — set to the actual number of loaded modules from Limine
+
+
+
+fb_base, fb_width, fb_height, fb_pitch, fb_pixel_format — populate from the Limine framebuffer response already used by the ocular subsystem
+
+
+
+modules[] — populate each slot with phys_base, size, entry, type, flags, index from Limine module response
+
+
+
+integrity_hash — compute BLAKE3 over entire struct with hash bytes zeroed first, then write result
+
+3. Bump BOOTINFO_VERSION to 2 in both headers and update both verify files accordingly
+
+4. Update user/paradigm/main.c — change version == 1 check to version == 2, add validation of v2 fields
+
+5. Add kernel self-test to kernel/main.c emitting [BOOTINFO] v2 validation: PASS
+
+6. Wire shared/verify_bootinfo.c into user/Makefile
+
+Show the Phase 2 implementation plan before writing any code.
