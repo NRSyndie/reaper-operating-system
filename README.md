@@ -57,6 +57,36 @@ make -C kernel verify_matrix
 
 See `tools/` for day-specific closure suites and `make help` targets in the kernel Makefile.
 
+## Boot verification
+
+`kernel/reaper-os.iso` is booted through QEMU during development to validate the runtime. A headless boot produces serial output showing the full bring-up. Key sequence (abridged):
+
+```text
+Reaper-OS: Console initialized.
+Reaper-OS: Serial port initialized (COM1).
+[KASLR] Kernel slide: 0x9fd77000
+[SMP] Topology ready: logical_cpus=1 ...
+[BOOT] Calling pmm_init ...
+[PMM-AUDIT] memmap_entries=16 usable_entries=4 total_frames=131040
+[PMM-AUDIT] buddy_free_lists initialized (max_order=10)
+[BOOT] Calling vmm_init / slab_init / acpi_init / dmar_init / iommu_init ...
+[BOOT] Calling pkru_init / cet_init / audit_init / mode_init ...
+[MODE_LEGACY_SHIM] from=0 to=1 ...  (mode_transitions exercised)
+[TEST] Day 19 Mode Mask Validation: SUCCESS.
+[GENESIS] Constructing the Bridge ...
+[GENESIS] Paradigm soul forged and queued. C-Slot 1: GENESIS_CAP.
+[GENESIS] sys_genesis_invoke: SPAWN PID 11 found in registry.
+[GENESIS] Authority exhausted. The Bridge is closed.
+[GENESIS] sys_genesis_invoke: Post-exhaustion call REJECTED.
+[USER-LOG] PARADIGM: Awake in the Void.
+[USER-LOG] [TEST] Day 18 Paradigm C Daemon Bootstrap: SUCCESS.
+[USER-LOG] PARADIGM: Reality is CASUAL (Correct).
+[USER-LOG] [TEST] Day 34 Real Fault Path Contract: SUCCESS.
+[USER-LOG] PARADIGM: Pulse ...   (system stays healthy in an idle loop)
+```
+
+The boot drives the memory allocators, virtual memory, mode transitions, and the Genesis bootstrap path, then hands authority to the userspace Paradigm daemon, which owns the Reality policy and runs its contract validation suites before settling into a healthy idle loop.
+
 ## Status
 
-Actively developed. The kernel builds and links to `kernel.elf`; user space bootstrapping and daemon work are in progress.
+Actively developed. The kernel builds, links, and boots into a userspace runtime in QEMU.
