@@ -26,7 +26,8 @@ DEPS = $(SRCS_C:.c=.d) # Auto-generated dependency files
 # --- Output Files ---
 KERNEL_ELF = kernel.elf
 ISO_FILE = reaper-os.iso
-USER_ELF = ../user/init.elf
+GENESIS_USER_ELF = ../user/genesis.elf
+PARADIGM_USER_ELF = ../user/paradigm.elf
 
 # --- Logging Configuration ---
 LOG_DIR = docs/logs
@@ -55,7 +56,7 @@ else
 endif
 
 # --- Main Targets ---
-.PHONY: all run iso clean limine_build verify_matrix verify_day28 verify_day29 verify_day30 verify_day31 verify_day32 verify_day33 verify_day34 verify_final_gate verify_final_release
+.PHONY: all run iso user_mods clean limine_build verify_matrix verify_day28 verify_day29 verify_day30 verify_day31 verify_day32 verify_day33 verify_day34 verify_final_gate verify_final_release
 all: $(KERNEL_ELF)
 
 LOG_DIR_TARGET := $(LOG_DIR)
@@ -114,14 +115,19 @@ limine_build:
 # New ISO target for Limine
 iso: $(ISO_FILE)
 
-$(ISO_FILE): $(KERNEL_ELF) $(USER_ELF)
+# Phony target: build both userspace ELFs every time (so a cleaned tree works).
+user_mods:
+	$(Q)$(MAKE) -C ../user
+
+$(ISO_FILE): $(KERNEL_ELF) user_mods
 	$(VECHO) "  BUILD   User Space"
 	$(Q)$(MAKE) -C ../user
 	$(VECHO) "  ISO     $(ISO_FILE) (with Limine)"
 	$(Q)mkdir -p isofiles/boot
 	$(Q)mkdir -p isofiles/EFI/BOOT
 	$(Q)cp $(KERNEL_ELF) isofiles/boot/kernel.elf
-	$(Q)cp $(USER_ELF) isofiles/boot/init.elf
+	$(Q)cp $(GENESIS_USER_ELF) isofiles/boot/genesis.elf
+	$(Q)cp $(PARADIGM_USER_ELF) isofiles/boot/paradigm.elf
 	$(Q)cp $(LIMINE_SYS) isofiles/
 	$(Q)cp $(LIMINE_BIOS_CD) isofiles/
 	$(Q)cp $(LIMINE_UEFI_CD) isofiles/
@@ -133,7 +139,8 @@ $(ISO_FILE): $(KERNEL_ELF) $(USER_ELF)
 	$(Q)echo '    protocol: limine' >> isofiles/limine.conf
 	$(Q)echo '    kaslr: no' >> isofiles/limine.conf
 	$(Q)echo '    path: boot():/boot/kernel.elf' >> isofiles/limine.conf
-	$(Q)echo '    module_path: boot():/boot/init.elf' >> isofiles/limine.conf
+	$(Q)echo '    module_path: boot():/boot/genesis.elf' >> isofiles/limine.conf
+	$(Q)echo '    module_path: boot():/boot/paradigm.elf' >> isofiles/limine.conf
 	$(Q)mkdir -p isofiles/limine
 	$(Q)cp isofiles/limine.conf isofiles/boot/limine.conf
 	$(Q)cp isofiles/limine.conf isofiles/limine/limine.conf

@@ -141,3 +141,97 @@ Residual risks:
 - User-copy hardening is improved, but still uses software range/mapping checks rather than hardware-fault-safe guarded copy mechanisms.
 - `SYS_WAIT` currently provides minimal same-process "wait for any peer exit" semantics, not full process-wait API richness.
 - Strict map/unmap is now strict-only in the public user API and closure-gated by kernel-owned Law 2 attestations.
+
+---
+
+## Status Update (2026-08-16) — External-review remediation plan
+
+This section records the concrete, finite remediation plan for a third-party
+architecture review. Each item is a single named action with a real artifact
+or an explicit written choice behind it. No aggregate/prose claims here; each
+row states exactly what is checked and how.
+
+### A) Section 9 hardening claims — four distinct self-tests (do NOT fold together)
+
+The vision document (`docs/project_vision_and_architecture.md` §9) currently
+claims deterministic capability-based memory protection is "mathematically
+superior" to ASLR. Until each hardening control has its own runtime self-test,
+§9 may state only **"SMEP/SMAP enforced (verified)"** and list the other three
+as **"planned, unverified"** — no aggregate claim covering all four.
+
+| Control | Verification mechanism (each its own test) | Status |
+|---|---|---|
+| SMEP | `kernel/main.c` self-test reads `CR4` bit 20, emits PASS/FAIL | planned |
+| SMAP | `kernel/main.c` self-test reads `CR4` bit 21, emits PASS/FAIL | planned |
+| KPTI | self-test compares `CR3` across a user→kernel transition: if page tables are actually split, kernel-only mappings must be provably absent from the user `CR3`, and a targeted read attempt from userspace must fault | planned |
+| KASLR | self-test compares the kernel's actual load address against the linked base across ≥3 separate boots (matches the existing "3 consecutive runs" pattern); if ever identical, KASLR is not happening | planned |
+| Stack guard pages | self-test intentionally provokes a controlled overflow into the guard page and confirms a fault (no silent corruption of adjacent memory) | planned |
+
+### B) `GENESIS_OP_MINT` dispatch gate — CONFIRMED kernel-boundary (type-1), not convention
+
+Confirmed by reading the literal current function at `kernel/genesis.c:363-469`
+(`genesis_syscall_dispatch`). The gate is enforced at the kernel boundary for
+every op, *before* the op `switch`:
+
+```c
+uint64_t genesis_syscall_dispatch(process_t* owner, uint32_t op, uint32_t cap_slot,
+                                   uint64_t req_ptr, bool is_kernel) {
+    if (!owner || !owner->cspace) return (uint64_t)-1;
+    if (cap_genesis_is_exhausted())  return (uint64_t)-1;   // post-destroy: all ops die
+    /* Validate the Genesis Capability in the caller's cspace. */
+    cap_identity_t* ident = cap_lookup(owner->cspace, cap_slot);
+    if (!ident || ident->type != CAP_TYPE_GENESIS) return (uint64_t)-1;  // must present GENESIS_CAP
+    switch (op) { ... }
+}
+```
+
+Two kill switches sit before the `switch`, so any future `GENESIS_OP_MINT`
+added inside this dispatcher inherits both automatically:
+1. `cap_genesis_is_exhausted()` — after Genesis destroys its `GENESIS_CAP`
+   (`cap_genesis_exhaust()`), every op returns `-1` permanently.
+2. `cap_lookup(owner->cspace, cap_slot)` must return a live `CAP_TYPE_GENESIS`
+   identity in the caller's own cspace.
+
+Additionally, spawned daemons receive `.genesis_cap_slot = 0` (`kernel/genesis.c:396`),
+so they do not receive the capability at all.
+
+**Written precondition for the B3 mint primitive:** `GENESIS_OP_MINT` must
+land *inside* this gated dispatcher (not as a free-function op), and must ship
+with a deterministic positive/negative probe pair before it is greenlit.
+
+### C) One-shot provisioning — architectural decision (default: option a)
+
+Decision to be written into the vision document §6 (Genesis's role) as an
+explicit choice, not left implicit. Two candidate answers:
+
+- **(a) Genesis is one-shot.** All authority is provisioned once at boot.
+  Anything needing new authority later (new Reality, respawned daemon, Ghost
+  Mode microVM) obtains it by *delegation* from an already-provisioned daemon
+  (e.g. Paradigm delegating a subset of what it already holds), never by fresh
+  minting. Consistent with Zero-Residue / immutable Fate Strings philosophy
+  (additive-only; nothing created from nothing after Genesis dies).
+- **(b) Standing mint authority.** A daemon (probably Paradigm) needs mint
+  authority for the system's lifetime, meaning that daemon requires the same
+  TCB-boundary scrutiny as `GENESIS_OP_MINT`.
+
+**Default: (a).** It is more consistent with the architecture (Genesis dies,
+Fate Strings are additive, capabilities are unforgeable). To override to (b) a
+concrete runtime scenario requiring fresh post-boot minting must be documented
+first. This requires one paragraph in `docs/project_vision_and_architecture.md`
+§6 stating the choice explicitly.
+
+### D) Locked items (no further re-litigation)
+
+- **Area 4 B1 + B2:** proceed as scoped (docs phase; then dual-module split with
+  Genesis spawning Paradigm).
+- **PID-authority gate:** build `tools/check_no_ambient_pid_authority.sh` — a
+  grep-based manual gate matching the existing `tools/run_dayNN_closure_suite.sh`
+  pattern (`set -euo pipefail`, argparse), that exits non-zero if a raw
+  `pid == 1` / `pid != 1` / `->pid ==` privilege switch reappears in `kernel/`.
+  Run by hand before closing a closure day (this project has manual gates, not CI).
+- **Timeline removal:** remove the stale "13-19 Weeks (~4 Months)" estimate from
+  `docs/development_log/TODO.rst`, per the stated "time is not a constraint"
+  philosophy.
+- **Doc-hygiene rule:** planning/implementation artifacts must not contain
+  editorial scratch reasoning (internal-monologue reconciliation); plan docs are
+  clean spec, and plan-vs-implementation reconciliation happens in the day report.

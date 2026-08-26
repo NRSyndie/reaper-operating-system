@@ -13,6 +13,16 @@ void* memcpy(void* dest, const void* src, unsigned long n) {
     return dest;
 }
 
+int memcmp(const void* a, const void* b, unsigned long n) {
+    const unsigned char* pa = a;
+    const unsigned char* pb = b;
+    while (n-- > 0) {
+        if (*pa != *pb) return *pa - *pb;
+        pa++; pb++;
+    }
+    return 0;
+}
+
 unsigned long strlen(const char* str) {
     unsigned long len = 0;
     while (str[len]) len++;

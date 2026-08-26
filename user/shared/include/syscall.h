@@ -112,11 +112,6 @@ typedef enum {
     GENESIS_OP_DESTROY = 3
 } genesis_op_t;
 
-/* Cross-process boot convention: the cspace slot where CAP_TYPE_SPAWN_AUTH is
- * delegated to Paradigm by Genesis at boot. Both user/genesis/main.c (delegator)
- * and user/paradigm/main.c (holder) must agree on this single number. */
-#define GENESIS_SPAWN_AUTH_SLOT 8u
-
 typedef struct {
     uint32_t module_index;
     uint32_t flags;
@@ -125,13 +120,8 @@ typedef struct {
     uint32_t out_pagetable_slot;
     uint32_t out_sched_root_slot;
     uint32_t out_sched_thread_slot;
-    uint32_t out_ram_slot;
-    uint32_t out_audit_slot;
     uint32_t reserved0;
 } genesis_spawn_req_t;
-
-/* Spawn flags (genesis_spawn_req_t.flags). */
-#define GENESIS_SPAWN_FLAG_QUEUE_RUN  (1u << 0) /* queue the spawned thread so it executes */
 
 typedef struct {
     uint32_t pid;
@@ -139,8 +129,6 @@ typedef struct {
     uint32_t pagetable_slot;
     uint32_t sched_root_slot;
     uint32_t sched_thread_slot;
-    uint32_t ram_slot;
-    uint32_t audit_slot;
     uint32_t reserved0;
     uint64_t reserved1;
 } genesis_spawn_resp_t;

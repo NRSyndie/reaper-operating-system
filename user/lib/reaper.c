@@ -166,14 +166,14 @@ int sys_sched_auth_thread_derive(uint32_t root_slot,
                         local_max_accumulated);
 }
 
-int sys_genesis_invoke(uint32_t genesis_slot,
-                       uint32_t op,
+int sys_genesis_invoke(uint32_t op,
+                       uint32_t cap_slot,
                        const void* req,
                        uint64_t req_size,
                        void* resp) {
     return do_gate_call(GATE_OP_GENESIS_INVOKE,
-                        genesis_slot,
                         op,
+                        cap_slot,
                         (uint64_t)req,
                         req_size,
                         (uint64_t)resp);

@@ -151,9 +151,9 @@ _Static_assert(sizeof(((boot_module_t *)0)->content_hash) == 32,
 
 _Static_assert(BOOTINFO_MAGIC   == 0x5245415053454E47ULL,
                "BOOTINFO_MAGIC must remain 0x5245415053454E47 (\"REAPGENG\")");
-_Static_assert(BOOTINFO_VERSION == 1,
-               "BOOTINFO_VERSION must remain 1 in Phase 1; "
-               "the bump to 2 is a Phase 2 kernel change");
+_Static_assert(BOOTINFO_VERSION == 2,
+               "BOOTINFO_VERSION must be 2 in Phase 2; "
+               "the bump from 1 to 2 is a Phase 2 kernel change");
 _Static_assert(BOOTINFO_MODULE_COUNT == 16,
                "BOOTINFO_MODULE_COUNT must be 16");
 _Static_assert(BOOTINFO_INTEGRITY_SIZE == 32,

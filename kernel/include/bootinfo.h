@@ -91,7 +91,7 @@
  * the Day 15 marker [TEST] Day 15 Bootinfo Bridge: SUCCESS. and the
  * PARADIGM: Genesis bridge probe PASS. conformance marker, both of
  * which check version == 1. */
-#define BOOTINFO_VERSION  1                     /* unchanged in Phase 1; bumps to 2 in Phase 2 */
+#define BOOTINFO_VERSION  2                     /* bumped to 2 in Phase 2 */
 
 /* Integrity hash size in bytes. The hash is BLAKE3 of the entire
  * struct with these 32 bytes replaced by zero before the call. */

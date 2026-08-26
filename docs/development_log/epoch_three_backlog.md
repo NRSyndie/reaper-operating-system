@@ -62,6 +62,19 @@ Execute the approved Epoch III strategy with security-first sequencing, measurab
   - `GENESIS_OP_SPAWN` preserves `reality_ctrl_slot = 0` sentinel — child daemons do not inherit reality control by default.
   - Added `test_pid_privilege_removal()` in `kernel/main.c`: creates two dynamically-PID'd test processes, verifies positive and negative paths for both `sys_mode_query_handler` and `sys_sched_auth_root_mint_handler` by direct function call, destroys both processes at end.
   - Verified with `[KERNEL] pid-privilege-removal: PASS` serial marker and `make -C kernel verify_matrix` 3/3 PASS.
+- Area 3: Reality-Aware Bootinfo v2 Closure (DONE 2026-08-16):
+  - Landed the packed v2 ABI in `shared/include/bootinfo.h` + `kernel/include/bootinfo.h`: v1 fields byte-preserved; appended `flags`, `module_count`, `fb_*`, reserved v2 wordlets, `integrity_hash`, and `modules[16]` (each a 72-byte `boot_module_t`).
+  - Added compile-time layout verifiers on both sides: `kernel/verify_bootinfo.c` uses `_Static_assert`; `shared/verify_bootinfo.c` uses the C99 typedef-array trick (`-std=gnu99`). Both assert `sizeof(boot_info_t) == 1360`, `_Alignof == 1`, every field offset, and `BOOTINFO_VERSION == 2`; the `offsetof(..., modules) == 208` guard catches the 52-byte sizing bug.
+  - Bumped `BOOTINFO_VERSION` 1 → 2 in both headers and kept both verifiers in lock-step.
+  - Phase 2 populated v2 fields in `genesis_bootinfo_init`: `flags`, capped `module_count`, framebuffer from the Limine response (raw `fb_pitch`, no division by 4), and `modules[]` (`phys_base`, `size`, `entry = 0` with a "populated by GENESIS_OP_SPAWN at runtime" comment, kernel-policy `type` where index 0 → PARADIGM and others → DATA, `flags`, `index`).
+  - Fixed the `bootinfo->version = 1` hardcode to `bootinfo->version = BOOTINFO_VERSION` — the field had been silently diverging from the ABI constant, forcing Paradigm down the v1 fallback path.
+  - Computed a BLAKE3 `integrity_hash` last: zero the 32 hash bytes, hash the whole struct, write the result back (all-zero hash is the "could not compute" sentinel).
+  - Exposed the bootinfo physical frame via `genesis_bootinfo_phys` + `genesis_get_bootinfo_phys()` so the kernel self-test reads it through the HHDM with `pmm_phys_to_virt()` instead of the userspace virtual `0x1000`.
+  - Ported a self-contained BLAKE3 library into `user/lib/blake3/` (blake3.h/.c/.portable/.dispatch + a minimal `blake3_impl.h` that drops the kernel-only `include/utils.h` include and adds `<string.h>`), added `memcmp` to `user/lib/string.c`, and wired `-Ilib`, `-fno-stack-protector`, and the blake3 sources into `user/Makefile`.
+  - Paradigm (`user/paradigm/main.c`) now branches on `version == 2`, validates v2 flags/dimensions/module_count, and performs full BLAKE3 verification (memcpy whole struct, zero hash bytes, hasher over it, `memcmp` against stored hash), emitting `[USER-LOG] PARADIGM: Bootinfo v2 integrity VERIFIED.` on success.
+  - Restored the kernel self-test after `genesis_bridge_spawn()`/`test_genesis_lifecycle()`: reads `pmm_phys_to_virt(genesis_get_bootinfo_phys())`, verifies magic/version/dual-flags/module_count and a non-zero hash across all 32 bytes, and emits `[BOOTINFO] v2 validation: PASS`.
+  - Wired `shared/verify_bootinfo.c` into the userspace build (`-I../shared/include` + staged copy at `user/shared/verify_bootinfo.c`).
+  - Verified with headless-boot serial evidence (`[BOOTINFO] v2 validation: PASS` and `[USER-LOG] PARADIGM: Bootinfo v2 integrity VERIFIED.`) and `make -C kernel verify_matrix` 3/3 PASS.
 
 ## Workstream 1 — Security Contracts (Priority 0)
 ### 1.1 `SYS_AUDIT` / Fate Strings Foundation

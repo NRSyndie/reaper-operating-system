@@ -8,6 +8,7 @@
 #include "include/thread.h"
 #include "include/scheduler.h"
 #include "include/utils.h"
+#include "blake3/blake3.h"
 #include "include/limine.h"
 #include "include/console.h"
 #include "include/klog.h"
@@ -17,6 +18,7 @@
 
 extern struct limine_memmap_request memmap_request;
 extern struct limine_hhdm_request hhdm_request;
+extern struct limine_framebuffer_request framebuffer_request;
 extern struct limine_executable_address_request executable_address_request;
 extern struct limine_module_request module_request;
 extern char kernel_start[];
@@ -27,12 +29,19 @@ extern char kernel_end[];
 #define PARADIGM_STACK_TOP  0x800000
 #define PARADIGM_STACK_PAGES 8
 
+/* Physical address of the bootinfo frame, set during genesis_bootinfo_init */
+static uint64_t genesis_bootinfo_phys = 0;
+
+uint64_t genesis_get_bootinfo_phys(void) {
+    return genesis_bootinfo_phys;
+}
+
 /* 
  * We need a way to pass the Entry Point to the trampoline.
  * For now, we'll store it in a static variable since Genesis is a singleton event.
  */
-static uint64_t paradigm_entry_point = 0;
-static uint32_t paradigm_pid = 0;
+static uint64_t genesis_entry_point = 0;
+static uint32_t genesis_pid = 0;
 
 /*
  * genesis_copy_from_user: local safe-copy from user address space.
@@ -59,11 +68,12 @@ static bool genesis_is_delegatable_type(cap_type_t t) {
     return t == CAP_TYPE_REALITY_CTRL   ||
            t == CAP_TYPE_AUDIT_WRITE    ||
            t == CAP_TYPE_SCHED_AUTH     ||
-           t == CAP_TYPE_SCHED_AUTH_ROOT;
+           t == CAP_TYPE_SCHED_AUTH_ROOT ||
+           t == CAP_TYPE_SPAWN_AUTH;
 }
 
-static void paradigm_entry_stub(void) {
-    entry_pipeline_run(scheduler_get_current(), paradigm_entry_point, GENESIS_DEFAULT_STACK_TOP);
+static void genesis_entry_stub(void) {
+    entry_pipeline_run(scheduler_get_current(), genesis_entry_point, GENESIS_DEFAULT_STACK_TOP);
 }
 
 bool genesis_bootinfo_init(boot_info_t* bootinfo, uint32_t genesis_cap_slot) {
@@ -71,9 +81,12 @@ bool genesis_bootinfo_init(boot_info_t* bootinfo, uint32_t genesis_cap_slot) {
 
     fast_zero(bootinfo, sizeof(*bootinfo));
     bootinfo->magic = BOOTINFO_MAGIC;
-    bootinfo->version = 1;
+    bootinfo->version = BOOTINFO_VERSION;
     bootinfo->hhdm_offset = hhdm_request.response ? hhdm_request.response->offset : 0;
     bootinfo->genesis_cap_slot = genesis_cap_slot;
+
+    /* Record the bootinfo physical frame for the kernel self-test. */
+    genesis_bootinfo_phys = (uint64_t)bootinfo - bootinfo->hhdm_offset;
 
     if (memmap_request.response && hhdm_request.response) {
         bootinfo->memmap_addr = (uint64_t)memmap_request.response->entries - bootinfo->hhdm_offset;
@@ -86,6 +99,51 @@ bool genesis_bootinfo_init(boot_info_t* bootinfo, uint32_t genesis_cap_slot) {
 
         bootinfo->kernel_start = p_base + ((uint64_t)kernel_start - v_base);
         bootinfo->kernel_end = p_base + ((uint64_t)kernel_end - v_base);
+    }
+
+    /* --- v2-only fields --- */
+    bootinfo->flags = BOOTINFO_FLAG_FRAMEBUFFER | BOOTINFO_FLAG_MODULE_TABLE;
+
+    if (module_request.response->module_count > BOOTINFO_MODULE_COUNT)
+        bootinfo->module_count = BOOTINFO_MODULE_COUNT;
+    else
+        bootinfo->module_count = module_request.response->module_count;
+
+    /* framebuffer from Limine — raw values, no /4 */
+    if (framebuffer_request.response && framebuffer_request.response->framebuffer_count > 0) {
+        struct limine_framebuffer* fb = framebuffer_request.response->framebuffers[0];
+        bootinfo->fb_base   = (uint64_t)fb->address - bootinfo->hhdm_offset;
+        bootinfo->fb_width  = fb->width;
+        bootinfo->fb_height = fb->height;
+        bootinfo->fb_pitch  = fb->pitch;            /* bytes per scanline, raw */
+        bootinfo->fb_pixel_format = BOOTINFO_PIXEL_FORMAT_RGB888;
+    }
+
+    /* modules[] — populate each slot */
+    for (uint32_t i = 0; i < bootinfo->module_count; i++) {
+        struct limine_file* mod = module_request.response->modules[i];
+        boot_module_t* slot = &bootinfo->modules[i];
+        slot->phys_base   = (uint64_t)mod->address - bootinfo->hhdm_offset;
+        slot->size        = mod->size;
+        slot->entry       = 0;   /* populated by GENESIS_OP_SPAWN at runtime, not at bootinfo construction */
+        slot->type        = (i == 0) ? BOOT_MODULE_TYPE_GENESIS
+                          : (i == 1) ? BOOT_MODULE_TYPE_PARADIGM
+                          : BOOT_MODULE_TYPE_DATA;
+                    /* module 0 is the Genesis bootstrapper, module 1 is Paradigm;
+                     * further modules are data. */
+        slot->flags       = BOOT_MODULE_FLAG_EXECUTABLE | BOOT_MODULE_FLAG_TRUSTED;
+        slot->index       = i;
+    }
+
+    /* integrity_hash — BLAKE3 over entire struct with hash bytes zeroed first */
+    {
+        fast_zero(bootinfo->integrity_hash, sizeof(bootinfo->integrity_hash));
+        {
+            blake3_hasher hasher;
+            blake3_hasher_init(&hasher);
+            blake3_hasher_update(&hasher, bootinfo, sizeof(*bootinfo));
+            blake3_hasher_finalize(&hasher, (uint8_t*)bootinfo->integrity_hash, 32);
+        }
     }
 
     return true;
@@ -217,7 +275,7 @@ int genesis_spawn_process_from_module(struct limine_file* module,
     if (genesis_load_module_image(module, proc, &result.entry_point) != 0) return -1;
     if (genesis_map_initial_stack(proc, stack_top, stack_pages) != 0) return -1;
 
-    thread = thread_create(proc, paradigm_entry_stub);
+    thread = thread_create(proc, genesis_entry_stub);
     if (!thread) return -1;
 
     if (mint_sched_auth) {
@@ -287,33 +345,39 @@ void genesis_bridge_spawn(void) {
                                               true,
                                               true,
                                               &result) != 0) {
-            kprintf("[DAY15-FAIL] paradigm process creation failed\n");
-            kpanic("GENESIS: Failed to create Paradigm process!");
+            kprintf("[DAY15-FAIL] genesis process creation failed\n");
+            kpanic("GENESIS: Failed to create Genesis process!");
         }
 
-        paradigm_entry_point = result.entry_point;
-        paradigm_pid = result.process->pid;
+        genesis_entry_point = result.entry_point;
+        genesis_pid = result.process->pid;
     }
 
     kprintf("[TEST] Day 15 Genesis Capability Injection: SUCCESS.\n");
     kprintf("[TEST] Day 15 Bootinfo Bridge: SUCCESS.\n");
-    kprintf("[GENESIS] ELF Loaded. Entry Point: 0x%lx\n", paradigm_entry_point);
+    kprintf("[GENESIS] ELF Loaded. Entry Point: 0x%lx\n", genesis_entry_point);
 
-    kprintf("[GENESIS] Paradigm soul forged and queued. C-Slot 1: GENESIS_CAP.\n");
+    kprintf("[GENESIS] Genesis soul forged and queued. C-Slot 1: GENESIS_CAP.\n");
 }
 
-uint32_t genesis_get_paradigm_pid(void) {
-    return paradigm_pid;
+uint32_t genesis_get_genesis_pid(void) {
+    return genesis_pid;
 }
 
 uint64_t genesis_syscall_dispatch(process_t* owner, uint32_t op, uint32_t cap_slot,
                                    uint64_t req_ptr, bool is_kernel) {
     if (!owner || !owner->cspace) return (uint64_t)-1;
-    if (cap_genesis_is_exhausted())  return (uint64_t)-1;
 
-    /* Validate the Genesis Capability in the caller's cspace. */
+    /* Classify the caller's presented capability. The exhaustion latch is
+     * scoped to the GENESIS path only: it represents Genesis's unbounded
+     * authority being spent, and must NOT sweep away a CAP_TYPE_SPAWN_AUTH
+     * holder's independent, bounded spawn authority after Genesis exits. */
     cap_identity_t* ident = cap_lookup(owner->cspace, cap_slot);
-    if (!ident || ident->type != CAP_TYPE_GENESIS) return (uint64_t)-1;
+    if (!ident) return (uint64_t)-1;
+    const bool is_genesis    = (ident->type == CAP_TYPE_GENESIS);
+    const bool is_spawn_auth = (ident->type == CAP_TYPE_SPAWN_AUTH);
+    if (!is_genesis && !is_spawn_auth) return (uint64_t)-1;
+    if (is_genesis && cap_genesis_is_exhausted()) return (uint64_t)-1;
 
     switch (op) {
 
@@ -341,14 +405,17 @@ uint64_t genesis_syscall_dispatch(process_t* owner, uint32_t op, uint32_t cap_sl
                  * Genesis cap injection when this field is 0. */
                 .genesis_cap_slot  = 0,
                 .pagetable_slot    = req.out_pagetable_slot,
-                /* TODO: expose ram_slot and audit_slot in genesis_spawn_req_t
-                 * when bootinfo v2 lands.  Area 3 is the right time. */
-                .ram_slot          = 3,
-                .audit_slot        = 4,
+                .ram_slot          = req.out_ram_slot,
+                .audit_slot        = req.out_audit_slot,
                 .sched_root_slot   = req.out_sched_root_slot,
                 .sched_thread_slot = req.out_sched_thread_slot,
                 .reality_ctrl_slot = 0,
             };
+
+            /* ram/audit slots are mandatory for a spawn; a zero sentinel means
+             * "no slot" and would silently produce a cap-less process. */
+            if (req.out_ram_slot == 0 || req.out_audit_slot == 0)
+                return (uint64_t)-1;
 
             genesis_spawn_result_t result;
 
@@ -358,7 +425,7 @@ uint64_t genesis_syscall_dispatch(process_t* owner, uint32_t op, uint32_t cap_sl
                                                   PARADIGM_STACK_TOP,
                                                   PARADIGM_STACK_PAGES,
                                                   &caps, true,
-                                                  false, /* don't queue yet */
+                                                  (req.flags & GENESIS_SPAWN_FLAG_QUEUE_RUN) != 0,
                                                   &result) != 0)
                 return (uint64_t)-1;
 
@@ -367,6 +434,7 @@ uint64_t genesis_syscall_dispatch(process_t* owner, uint32_t op, uint32_t cap_sl
 
         /* ------------------------------------------------------------------ */
         case GENESIS_OP_DELEGATE: {
+            if (!is_genesis) return (uint64_t)-1;
             genesis_delegate_req_t req;
             if (is_kernel) {
                 memcpy(&req, (void*)req_ptr, sizeof(req));
@@ -402,6 +470,7 @@ uint64_t genesis_syscall_dispatch(process_t* owner, uint32_t op, uint32_t cap_sl
 
         /* ------------------------------------------------------------------ */
         case GENESIS_OP_DESTROY: {
+            if (!is_genesis) return (uint64_t)-1;
             if (cap_genesis_exhaust()) {
                 kprintf("[GENESIS] Authority exhausted. The Bridge is closed.\n");
                 return 0;

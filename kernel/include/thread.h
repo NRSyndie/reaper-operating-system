@@ -30,8 +30,7 @@ typedef struct {
  * A single execution stream within a World.
  */
 typedef struct thread {
-    uint64_t kernel_stack_top; /* Pointer to the top of the private K-stack */
-    uint64_t rsp;              /* Saved stack pointer (points to saved_context_t) */
+    uint64_t kernel_stack_top; /* Pointer to the top of the private K-stack */    uint64_t rsp;              /* Saved stack pointer (points to saved_context_t) */
     uint64_t stack_canary;     /* Magic value to detect stack overflow */
     
     thread_state_t state;

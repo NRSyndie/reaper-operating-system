@@ -32,6 +32,7 @@ typedef enum {
     CAP_TYPE_REALITY_CTRL,      /* Reality control authority */
     CAP_TYPE_AUDIT_WRITE,       /* Audit record emission authority */
     CAP_TYPE_SCHED_AUTH,        /* Broad process-level scheduling authority */
+    CAP_TYPE_SPAWN_AUTH,        /* Spawn-only: sole right to invoke GENESIS_OP_SPAWN against the boot-time module table */
     CAP_MAX_TYPES
 } cap_type_t;
 

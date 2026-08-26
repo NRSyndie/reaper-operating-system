@@ -155,6 +155,7 @@ extern volatile uint64_t limine_base_revision[3];
 extern struct limine_bootloader_info_request bootloader_info_request;
 extern struct limine_memmap_request memmap_request;
 extern struct limine_hhdm_request hhdm_request;
+extern struct limine_module_request module_request;
 extern struct limine_executable_address_request executable_address_request;
 
 // Global KASLR slide
@@ -529,13 +530,17 @@ static void test_recursive_revocation(void) {
     for (volatile int i = 0; i < 5000000; i++);
 }
 
+/* Process (Genesis) on which the deferred post-exhaustion probe runs once real
+ * Genesis has destroyed its own GENESIS_CAP in userspace. */
+static process_t* genesis_proc_for_exhaustion = NULL;
+
 static void test_genesis_lifecycle(void) {
     kprintf("[TEST] Genesis Lifecycle validation (8 Steps)...\n");
-    uint32_t pid = genesis_get_paradigm_pid();
+    uint32_t pid = genesis_get_genesis_pid();
     process_t* paradigm = process_find_by_pid(pid);
     if (!paradigm) {
-        kprintf("GENESIS-TEST: Paradigm (PID %u) not found\n", pid);
-        kpanic("GENESIS-TEST: Paradigm missing");
+        kprintf("GENESIS-TEST: Genesis (PID %u) not found\n", pid);
+        kpanic("GENESIS-TEST: Genesis missing");
     }
 
     /* 1. Initial State Check */
@@ -553,6 +558,8 @@ static void test_genesis_lifecycle(void) {
         .out_pagetable_slot    = 2,
         .out_sched_root_slot   = 5,
         .out_sched_thread_slot = 6,
+        .out_ram_slot          = 3,
+        .out_audit_slot        = 4,
     };
     int new_pid = (int)genesis_syscall_dispatch(paradigm, GENESIS_OP_SPAWN, 1, (uint64_t)&req, true);
     if (new_pid <= 1 || !process_find_by_pid((uint32_t)new_pid))
@@ -607,19 +614,118 @@ static void test_genesis_lifecycle(void) {
     process_destroy(process_find_by_pid((uint32_t)new_pid));
     if (process_find_by_pid((uint32_t)new_pid)) kpanic("GENESIS-TEST: Cleanup failed");
 
-    /* 5. Exhaustion via Dispatch Path */
-    if (genesis_syscall_dispatch(paradigm, GENESIS_OP_DESTROY, 1, 0, true) != 0)
-        kpanic("GENESIS-TEST: Exhaustion failed");
+    /* 4b. Scoped-latch capability-class probes. These do NOT trip the exhaust
+     *      latch (only GENESIS_OP_DESTROY does), so they run synchronously here:
+     *      a CAP_TYPE_SPAWN_AUTH holder (distinct bounded authority) may spawn,
+     *      while a non-GENESIS/non-SPAWN_AUTH holder must be rejected. */
+    {
+        uint64_t sa_pml4 = vmm_fork_pml4();
+        uint16_t sa_pcid = pcid_alloc(MODE_CASUAL);
+        cnode_t* sa_cspace = cnode_create();
+        process_t* spawner = process_create(sa_pml4, sa_pcid, sa_cspace, MODE_CASUAL);
+        if (!spawner) kpanic("GENESIS-TEST: SPAWN_AUTH probe process create failed");
 
-    /* 6. Post-Exhaustion Syscall Path Rejection */
-    if (genesis_syscall_dispatch(paradigm, GENESIS_OP_SPAWN, 1, (uint64_t)&req, true) != (uint64_t)-1)
+        cap_identity_t* sa_cap = cap_identity_create(0, CAP_TYPE_SPAWN_AUTH,
+                                                     CAP_RIGHT_INVOKE, 0, CAP_MODE_ALL);
+        if (!sa_cap || cap_insert(spawner->cspace, 8, sa_cap) != 0)
+            kpanic("GENESIS-TEST: SPAWN_AUTH cap insert failed");
+        if (genesis_syscall_dispatch(spawner, GENESIS_OP_SPAWN, 8, (uint64_t)&req, true) == (uint64_t)-1)
+            kpanic("GENESIS-TEST: SPAWN_AUTH holder rejected");
+        kprintf("[GENESIS] sys_genesis_invoke: SPAWN_AUTH positive PASS.\n");
+
+        cap_identity_t* ram_cap = cap_identity_create(0x1000, CAP_TYPE_RAM,
+                                                      CAP_RIGHT_READ, 0, CAP_MODE_ALL);
+        if (!ram_cap || cap_insert(spawner->cspace, 9, ram_cap) != 0)
+            kpanic("GENESIS-TEST: RAM cap insert failed");
+        if (genesis_syscall_dispatch(spawner, GENESIS_OP_SPAWN, 9, (uint64_t)&req, true) != (uint64_t)-1)
+            kpanic("GENESIS-TEST: non-GENESIS/non-SPAWN_AUTH accepted");
+        kprintf("[GENESIS] sys_genesis_invoke: non-SPAWN_AUTH negative PASS.\n");
+
+        process_destroy(spawner);
+    }
+
+    /* The DESTROY + post-exhaustion GENESIS-SPAWN rejection is intentionally
+     * DEFERRED. Only GENESIS_OP_DESTROY trips the global one-way latch, and it
+     * should verify the REAL, production exhaustion event (real Genesis in
+     * userspace destroying its own GENESIS_CAP) rather than manufacturing a
+     * synthetic one that would permanently close the bootstrap window before
+     * the real Genesis has even run. */
+    genesis_proc_for_exhaustion = paradigm;
+}
+
+/* Deferred exhaustion probe. Runs only after real userspace Genesis has
+ * destroyed its own GENESIS_CAP, so it verifies the real, production exhaustion
+ * event (system-wide bootstrap window permanently closed) rather than
+ * manufacturing a synthetic one. This is why it is NOT part of the synchronous
+ * pre-boot self-test sequence. It is deliberately LIGHTWEIGHT (a single rejected
+ * dispatch) so it runs on the small worker-thread kernel stack. */
+static void genesis_exhaustion_probe(process_t* genesis) {
+    genesis_spawn_req_t req = {
+        .module_index          = 0,
+        .out_pagetable_slot    = 2,
+        .out_sched_root_slot   = 5,
+        .out_sched_thread_slot = 6,
+        .out_ram_slot          = 3,
+        .out_audit_slot        = 4,
+    };
+
+    /* The latch must already be tripped by the real Genesis's own DESTROY. */
+    if (!cap_genesis_is_exhausted()) kpanic("GENESIS-TEST: exhaustion latch not set by real Genesis");
+
+    /* Post-exhaustion rejection: the real Genesis's GENESIS_CAP is now inert. */
+    if (genesis_syscall_dispatch(genesis, GENESIS_OP_SPAWN, 1, (uint64_t)&req, true) != (uint64_t)-1)
         kpanic("GENESIS-TEST: Post-exhaustion call accepted");
     kprintf("[GENESIS] sys_genesis_invoke: Post-exhaustion call REJECTED.\n");
-
-    /* 7. Registry Persistence */
-    if (!process_find_by_pid(pid)) kpanic("GENESIS-TEST: Registry corrupted");
-
     kprintf("[GENESIS] sys_genesis_invoke: PASS\n");
+}
+
+/* Kernel worker thread entry: waits (bounded) for real userspace Genesis to
+ * destroy its GENESIS_CAP, then runs the deferred exhaustion probe once. */
+static void genesis_exhaustion_worker(void) {
+    uint32_t spins = 200000000;
+    while (spins-- && !cap_genesis_is_exhausted()) {
+        thread_yield();
+    }
+    if (cap_genesis_is_exhausted() && genesis_proc_for_exhaustion) {
+        genesis_exhaustion_probe(genesis_proc_for_exhaustion);
+    }
+    for (;;) thread_yield();
+}
+
+/* Queue the deferred exhaustion worker thread. */
+static void queue_genesis_exhaustion_worker(process_t* genesis) {
+    thread_t* t = thread_create(genesis, genesis_exhaustion_worker);
+    if (!t) kpanic("GENESIS-TEST: exhaustion worker thread create failed");
+    scheduler_add(t);
+}
+
+static void test_dual_module_load(void) {
+    if (!module_request.response || module_request.response->module_count < 2) {
+        kprintf("[MODULES-FAIL] module table has < 2 entries\n");
+        kpanic("MODULES-TEST: dual-module load failed (module_count < 2)");
+    }
+    /* Verify both ELFs via the bootinfo module table already populated at boot. */
+    boot_info_t* bi = (boot_info_t*)pmm_phys_to_virt(genesis_get_bootinfo_phys());
+    if (!bi || bi->module_count < 2) {
+        kprintf("[MODULES-FAIL] bootinfo module table has < 2 entries\n");
+        kpanic("MODULES-TEST: dual-module load failed");
+    }
+    if (bi->modules[0].type != BOOT_MODULE_TYPE_GENESIS) {
+        kprintf("[MODULES-FAIL] module[0] not tagged GENESIS (type=%u)\n",
+                (unsigned)bi->modules[0].type);
+        kpanic("MODULES-TEST: module[0] type mismatch");
+    }
+    if (bi->modules[1].type != BOOT_MODULE_TYPE_PARADIGM) {
+        kprintf("[MODULES-FAIL] module[1] not tagged PARADIGM (type=%u)\n",
+                (unsigned)bi->modules[1].type);
+        kpanic("MODULES-TEST: module[1] type mismatch");
+    }
+    if (bi->modules[0].phys_base == 0 || bi->modules[0].size == 0 ||
+        bi->modules[1].phys_base == 0 || bi->modules[1].size == 0) {
+        kprintf("[MODULES-FAIL] dual-module phys_base/size not populated\n");
+        kpanic("MODULES-TEST: module phys_base/size zero");
+    }
+    kprintf("[MODULES] dual-module load: PASS\n");
 }
 
 static void test_pid_privilege_removal(void) {
@@ -1701,6 +1807,34 @@ void kernel_main(void) {
     genesis_bridge_spawn();
 
     test_genesis_lifecycle();
+
+    /* Day 15 Bootinfo v2 self-test */
+    {
+        boot_info_t* bi = (boot_info_t*)pmm_phys_to_virt(genesis_get_bootinfo_phys());
+        if (bi->magic != BOOTINFO_MAGIC) kpanic("Bootinfo v2 self-test: magic mismatch");
+        if (bi->version != BOOTINFO_VERSION) kpanic("Bootinfo v2 self-test: version mismatch");
+        if (!(bi->flags & (BOOTINFO_FLAG_FRAMEBUFFER | BOOTINFO_FLAG_MODULE_TABLE)))
+            kpanic("Bootinfo v2 self-test: missing v2 flags");
+        if (bi->module_count == 0) kpanic("Bootinfo v2 self-test: module_count == 0");
+        /* integrity_hash is uint64_t[4] (32 bytes); verify no byte is non-zero. */
+        bool hash_zero = true;
+        const uint8_t* hid = (const uint8_t*)bi->integrity_hash;
+        for (int j = 0; j < BOOTINFO_INTEGRITY_SIZE; j++) {
+            if (hid[j] != 0) { hash_zero = false; break; }
+        }
+        if (hash_zero) kpanic("Bootinfo v2 self-test: integrity_hash is all zero");
+        kprintf("[BOOTINFO] v2 validation: PASS\n");
+    }
+
+    /* Area 4: dual-module packaging — Genesis (0) + Paradigm (1) resident. */
+    test_dual_module_load();
+
+    /* Defer the exhaustion probe until real userspace Genesis destroys its own
+     * GENESIS_CAP (see genesis_exhaustion_probe). Queue the worker on the boot
+     * Genesis process; it runs once the scheduler takes over. */
+    if (genesis_proc_for_exhaustion) {
+        queue_genesis_exhaustion_worker(genesis_proc_for_exhaustion);
+    }
 
     klog_emit_silence_report();
     

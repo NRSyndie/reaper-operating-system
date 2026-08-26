@@ -47,8 +47,8 @@ int sys_sched_auth_thread_derive(uint32_t root_slot,
                                  uint32_t max_slice,
                                  uint32_t weight,
                                  uint64_t local_max_accumulated);
-int sys_genesis_invoke(uint32_t genesis_slot,
-                       uint32_t op,
+int sys_genesis_invoke(uint32_t op,
+                       uint32_t cap_slot,
                        const void* req,
                        uint64_t req_size,
                        void* resp);

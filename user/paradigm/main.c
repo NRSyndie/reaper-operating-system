@@ -1,5 +1,7 @@
 #include "../../user/include/reaper.h"
 #include <stdbool.h>
+#include "blake3/blake3.h"
+#include <string.h>
 
 #define BOOTINFO_ADDR ((boot_info_t*)0x1000)
 #define MAP_FLAG_P         (1ULL << 0)
@@ -48,10 +50,59 @@ int main(int argc, char** argv) {
     }
     
     sys_log("PARADIGM: BootInfo Verified.");
-    if (bi->version == 1 && bi->genesis_cap_slot == 1 && bi->kernel_end > bi->kernel_start) {
-        sys_log("PARADIGM: Genesis bridge probe PASS.");
+    if (bi->version == 2) {
+        /* v2 field validation */
+        bool ok = true;
+
+        if (!(bi->flags & BOOTINFO_FLAG_FRAMEBUFFER)) {
+            sys_log("PARADIGM: Bootinfo missing framebuffer flag");
+            ok = false;
+        }
+        if (!(bi->flags & BOOTINFO_FLAG_MODULE_TABLE)) {
+            sys_log("PARADIGM: Bootinfo missing module table flag");
+            ok = false;
+        }
+        if (bi->fb_width == 0 || bi->fb_height == 0) {
+            sys_log("PARADIGM: Bootinfo invalid framebuffer dimensions");
+            ok = false;
+        }
+        if (bi->module_count == 0) {
+            sys_log("PARADIGM: Bootinfo no modules loaded");
+            ok = false;
+        }
+
+        /* BLAKE3 integrity hash verification: recompute over the struct
+         * with the hash bytes zeroed, then compare against the stored hash. */
+        if (ok) {
+            boot_info_t local_bi;
+            memcpy(&local_bi, bi, sizeof(boot_info_t));
+            memset(local_bi.integrity_hash, 0, sizeof(local_bi.integrity_hash));
+
+            blake3_hasher hasher;
+            blake3_hasher_init(&hasher);
+            blake3_hasher_update(&hasher, &local_bi, sizeof(local_bi));
+            uint8_t computed_hash[BOOTINFO_INTEGRITY_SIZE];
+            blake3_hasher_finalize(&hasher, computed_hash, BOOTINFO_INTEGRITY_SIZE);
+
+            if (memcmp(computed_hash, bi->integrity_hash, BOOTINFO_INTEGRITY_SIZE) != 0) {
+                sys_log("PARADIGM: Bootinfo integrity hash mismatch");
+                ok = false;
+            }
+        }
+
+        if (ok) {
+            sys_log("PARADIGM: Genesis bridge probe PASS.");
+            sys_log("[USER-LOG] PARADIGM: Bootinfo v2 integrity VERIFIED.");
+            sys_log("PARADIGM: Holding SPAWN_AUTH at boot-convention slot (future daemon spawn).");
+        } else {
+            sys_log("PARADIGM: Genesis bridge probe FAIL.");
+        }
     } else {
-        sys_log("PARADIGM: Genesis bridge probe FAIL.");
+        if (bi->version == 1 && bi->genesis_cap_slot == 1 && bi->kernel_end > bi->kernel_start) {
+            sys_log("PARADIGM: Genesis bridge probe PASS.");
+        } else {
+            sys_log("PARADIGM: Genesis bridge probe FAIL.");
+        }
     }
     
     sys_log("PARADIGM: Checking Reality...");

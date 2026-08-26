@@ -10,6 +10,8 @@
 #include "thread.h"
 #include "../../shared/include/syscall.h"
 
+#define BOOTINFO_VIRT_ADDR 0x1000
+
 typedef struct {
     uint32_t genesis_cap_slot;
     uint32_t pagetable_slot;
@@ -52,7 +54,8 @@ int genesis_spawn_process_from_module(struct limine_file* module,
                                       bool queue_thread,
                                       genesis_spawn_result_t* out_result);
 
-uint32_t genesis_get_paradigm_pid(void);
+uint32_t genesis_get_genesis_pid(void);
+uint64_t genesis_get_bootinfo_phys(void);
 uint64_t genesis_syscall_dispatch(process_t* owner, uint32_t op, uint32_t cap_slot, uint64_t req_ptr, bool is_kernel);
 
 #endif /* REAPER_GENESIS_H */

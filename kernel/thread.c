@@ -13,6 +13,12 @@
 static uint32_t next_tid = 1;
 static slab_cache_t* thread_cache = NULL;
 
+/* Kernel stack: a 2-page (order-1) contiguous block. A user thread may run a
+ * heavy syscall (e.g. Genesis GENESIS_OP_SPAWN, which loads an ELF and forks an
+ * address space); its nested call depth exceeds a single 4KB frame. */
+#define THREAD_KSTACK_ORDER  1u
+#define THREAD_KSTACK_BYTES  (PAGE_SIZE << THREAD_KSTACK_ORDER)
+
 thread_t* thread_create(process_t* owner, void (*entry)(void)) {
     if (!thread_cache) {
         thread_cache = slab_create_cache("ThreadCache", sizeof(thread_t), 8);
@@ -24,19 +30,26 @@ thread_t* thread_create(process_t* owner, void (*entry)(void)) {
     }
     memset(t, 0, sizeof(thread_t));
 
-    /* Allocate private kernel stack (Void Color) */
-    uint64_t stack_phys = pmm_alloc(COLOR_VOID, 0);
+    /* Allocate private kernel stack (Void Color) — contiguous 2-page block. */
+    pmm_alloc_policy_t stack_policy = {
+        .color          = mode_to_color(mode_get_current()),
+        .owner_token    = 0,
+        .preferred_zone = PMM_ZONE_ANY,
+        .trust_level    = PMM_TRUST_ANY,
+        .order          = THREAD_KSTACK_ORDER,
+    };
+    uint64_t stack_phys = pmm_alloc_ex(&stack_policy);
     if (!stack_phys) {
                 slab_free(thread_cache, t);
         return NULL;
     }
-    uint64_t stack_virt = (uint64_t)pmm_phys_to_virt(stack_phys) + 4096;
+    uint64_t stack_virt = (uint64_t)pmm_phys_to_virt(stack_phys) + THREAD_KSTACK_BYTES;
 
     /* Allocate Extended State Buffer (SSE/FPU/XSAVE) */
     uint64_t ext_phys = pmm_alloc(COLOR_VOID, 0);
     if (!ext_phys) {
-                pmm_free(stack_phys);
-        slab_free(thread_cache, t);
+                pmm_free_ex(stack_phys, THREAD_KSTACK_ORDER);
+                slab_free(thread_cache, t);
         return NULL;
     }
     t->extended_state = pmm_phys_to_virt(ext_phys);
@@ -47,7 +60,7 @@ thread_t* thread_create(process_t* owner, void (*entry)(void)) {
     t->stack_canary = 0x535441434B444541ULL; /* "STACKDEA" */
     
     /* Write canary to the absolute bottom of the stack frame */
-    uint64_t* canary_ptr = (uint64_t*)(stack_virt - 4096);
+    uint64_t* canary_ptr = (uint64_t*)(stack_virt - THREAD_KSTACK_BYTES);
     *canary_ptr = t->stack_canary;
 
     t->state = THREAD_READY;
@@ -110,12 +123,12 @@ void thread_destroy(thread_t* thread) {
     process_t* owner = thread->owner;
 
     
-    /* Free kernel stack */
+    /* Free kernel stack (contiguous order-1 block) */
     if (thread->kernel_stack_top) {
-        void* stack_base = (void*)(thread->kernel_stack_top - 4096);
+        void* stack_base = (void*)(thread->kernel_stack_top - THREAD_KSTACK_BYTES);
         uint64_t stack_phys = pmm_virt_to_phys(stack_base);
-        hyper_scrub(stack_base, 4096);
-        pmm_free(stack_phys);
+        hyper_scrub(stack_base, THREAD_KSTACK_BYTES / 8);
+        pmm_free_ex(stack_phys, THREAD_KSTACK_ORDER);
     }
 
     /* Free extended state buffer */
