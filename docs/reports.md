@@ -1658,3 +1658,51 @@
     *   [PASS] `make -C kernel verify_matrix` (3/3)
     *   [PASS] Serial log confirms: `[GENESIS] sys_genesis_invoke: PASS`.
     *   [PASS] Serial log confirms: `USER-LOG] PARADIGM: Genesis bridge probe PASS`.
+
+### Epoch III, Day 91: Area 4 Dual-Module Boot Split Closure
+*   **What was changed:**
+    *   Split `user/Makefile` into two ELF targets: `genesis.elf` from `user/genesis/main.c` and `paradigm.elf` from `user/paradigm/main.c`, sharing `OBJS_BASE` (startup, reaper, string, blake3, verify_bootinfo).
+    *   Added `user/genesis/main.c` (90-line bootstrap stub): reads bootinfo at `0x1000`, validates magic/version, verifies `module_count >= 2` and `modules[1].type == BOOT_MODULE_TYPE_PARADIGM`, spawns Paradigm via `GENESIS_OP_SPAWN` with `module_index = 1`, delegates `CAP_TYPE_SPAWN_AUTH`, destroys `GENESIS_CAP`, and idles.
+    *   Updated `kernel/Makefile` ISO rule: copies both ELFs to `isofiles/boot/`, generates two `module_path` lines in `limine.conf` (genesis.elf first, paradigm.elf second).
+    *   Corrected `genesis_bootinfo_init` module type assignment in `kernel/genesis.c`: `i==0 → BOOT_MODULE_TYPE_GENESIS`, `i==1 → BOOT_MODULE_TYPE_PARADIGM`, else `BOOT_MODULE_TYPE_DATA`.
+    *   Added `test_dual_module_load()` kernel self-test in `kernel/main.c`: verifies `module_count >= 2`, bootinfo types match, `phys_base`/`size` populated; emits `[MODULES] dual-module load: PASS`.
+*   **Why it was changed:**
+    *   To split the monolithic boot model into a dual-module architecture where Genesis runs as a separate bootstrap stub before spawning Paradigm.
+    *   To correct the stale bootinfo type assignment that tagged module index 0 as PARADIGM when it is now GENESIS.
+    *   To close Area 4 of the Epoch III backlog.
+*   **Test Results:**
+    *   [PASS] `make -C user` successful (two ELFs produced).
+    *   [PASS] `make -C kernel` successful.
+    *   [PASS] Headless serial log confirms:
+        *   `[MODULES] dual-module load: PASS`
+        *   `[GENESIS] Awake in the Void.`
+        *   `[GENESIS] Paradigm spawned.`
+        *   `[GENESIS] GENESIS_CAP destroyed. The Bridge is closed.`
+    *   [PASS] `make -C kernel verify_matrix` successful (3/3 runs).
+
+### Epoch III, Day 92: Area 5 PKU Implementation Closure
+*   **What was changed:**
+    *   Enabled `+pku` in the QEMU CPU model for `make run` (`kernel/Makefile`) and the matrix harness (`tools/run_law2_fate_matrix.sh`); boot feature audit now reports `PKU: YES`.
+    *   Completed `pkru_init()` (`kernel/pku.c`): CPUID gate, `CR4.PKE` enable, PKRU deliberately held at `0x0` with a live-value log; incapable hardware degrades cleanly (`PKU: NO`, no panic).
+    *   Added `pkru_assign_key()` (`kernel/pku.c`): PML4→PT page-table walk tagging 2MB-huge PD entries and 4KB-leaf PT entries with protection keys in PTE bits 59-62 (`VMM_PK_SHIFT`/`VMM_PK` in `kernel/include/vmm.h`), with per-page `cpu_tlb_shootdown_page()`.
+    *   Wired `pkru_set_reality(to_mode)` into `env_apply_transition()` (`kernel/mode.c`) so every applied Reality transition carries a PKRU domain update.
+    *   Added `pku_self_test()` (`kernel/pku.c`, called from `kernel/main.c`): wrpkru/rdpkru round-trip, per-Reality `pkru_for_reality()` bit patterns, and key-isolation checks; emits `[PKU] self-test: PASS`.
+    *   Defined `XCR0_PKRU` (bit 9) in `kernel/include/cpu.h`; XSAVE-based per-thread PKRU switching was evaluated and rejected on QEMU TCG — a per-Reality kernel-managed PKRU model was adopted instead, with `XCR0_PKRU` retained for a future hardware path.
+    *   **Bug 1 fixed:** premature PKRU write caused a key-0 fault — init/transitions wrote a deny-all PKRU before any page carried a key. Fix: PKRU left at `0x0` until pages are tagged, plus a new `pkru_enforcement_active` guard making `pkru_set_reality` a no-op until region tagging is live.
+    *   **Bug 2 fixed:** `xorl %eax,%eax` on the TCG `swapgs`-replacement sysret path zeroed the dispatcher's return value, so every syscall returned `0` to userspace. Fix: `pushq %rax`/`popq %rax` save-restore around the `wrmsr` sequence in `kernel/interrupts.s`.
+    *   **Bug 3 fixed:** intermittent `GS_BASE=0` crash on syscall exit when a context switch left `MSR_GS_BASE` null. Fix: exit path re-reads `MSR_KERNEL_GS_BASE`→`MSR_GS_BASE` before the first GS access; `syscall_init` verifies the readback (`[SYSCALL] MSR_KERNEL_GS_BASE verified`) and the ISR dump prints both GS MSRs (`kernel/idt.c`).
+    *   Supporting fixes: `THREAD_KSTACK_BYTES` canary-offset correction (macro moved to `kernel/include/thread.h`) and `vmm.c` kernel-table guard now compares HHDM virtual addresses.
+    *   Extended the matrix harness to gate the new invariant: `+pku` CPU flag, `[PKU] self-test: PASS` / `[MODULES] dual-module load: PASS` / `[BOOTINFO] v2 validation: PASS` required, `[PKU-FAIL]` forbidden.
+*   **Why it was changed:**
+    *   To complete Area 5 of the kernel-prerequisites plan — PKU must be fully implemented and active before Sentinel's hardware-enforced isolation guarantee and the daemon implementation phase.
+    *   To surface and permanently fix three latent syscall-entry correctness bugs that the PKU-driven execution-pattern change exposed consistently.
+    *   To make the runtime matrix actually exercise PKU rather than silently skipping it.
+*   **Test Results:**
+    *   [PASS] Fresh headless boot serial log confirms:
+        *   `PKU: Initialized (PKRU = 0x0)`
+        *   `[PKU] self-test: PASS`
+        *   `  - PKU: YES`
+        *   `[SYSCALL] MSR_KERNEL_GS_BASE verified: 0xffffffff800beec0`
+        *   `[LAW2_ATTEST] day=28/29/30 result=PASS`; no `[PKU-FAIL]`, `[DAY30-FAIL]`, or `[DAY31-FAIL]`
+    *   [PASS] `make -C kernel verify_matrix` passed **three consecutive invocations**, 3/3 runs each, with the extended PKU markers enforced.
+    *   [PASS] All five kernel prerequisite areas (1-5) CLOSED — final gate before Genesis/Paradigm daemon work.

@@ -222,8 +222,8 @@ first. This requires one paragraph in `docs/project_vision_and_architecture.md`
 
 ### D) Locked items (no further re-litigation)
 
-- **Area 4 B1 + B2:** proceed as scoped (docs phase; then dual-module split with
-  Genesis spawning Paradigm).
+- **Area 4 B1 + B2: DONE.** Dual-module split completed 2026-09-10. See
+  `docs/reports/day91_final_report.md`.
 - **PID-authority gate:** build `tools/check_no_ambient_pid_authority.sh` — a
   grep-based manual gate matching the existing `tools/run_dayNN_closure_suite.sh`
   pattern (`set -euo pipefail`, argparse), that exits non-zero if a raw
