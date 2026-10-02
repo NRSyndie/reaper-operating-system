@@ -3,6 +3,7 @@
 #include <utils.h>  // For spinlock, memset, memcpy
 #include <cpu.h>    // For rdtsc
 #include <console.h> // For kprintf/logging
+#include <include/pku.h>
 #include <klog.h>
 #include <stddef.h>
 #include <scheduler.h>
@@ -602,7 +603,10 @@ static bool env_apply_transition(const env_compiled_transition_t* compiled, env_
     if (compiled->source == TRANSITION_SOURCE_KERNEL) kernel_mode_state.stats.transitions_auto++;
     else kernel_mode_state.stats.transitions_manual++;
     __atomic_fetch_add(&kernel_mode_state.security_epoch, 1, __ATOMIC_RELAXED);
-    
+
+    /* Set per-Reality PKU key domain */
+    pkru_set_reality((uint8_t)compiled->to_mode);
+
     // Day 12 Audit: Rotate seed and strike phase shift
     audit_rotate_seed(compiled->to_mode, mode_get_security_epoch());
     audit_meta_t meta = {0};

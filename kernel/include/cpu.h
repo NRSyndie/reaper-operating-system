@@ -152,9 +152,10 @@ struct invpcid_desc {
 void invpcid(uint64_t type, uint16_t pcid, uint64_t addr);
 
 /* XCR0 bits */
-#define XCR0_X87         (1 << 0)
-#define XCR0_SSE         (1 << 1)
-#define XCR0_AVX         (1 << 2)
+#define XCR0_X87         (1ULL << 0)
+#define XCR0_SSE         (1ULL << 1)
+#define XCR0_AVX         (1ULL << 2)
+#define XCR0_PKRU        (1ULL << 9)
 
 static inline uint64_t read_xcr0(void) {
     uint32_t lo, hi;

@@ -1240,7 +1240,7 @@ retry_pick:
     }
 
     if (old && old->tid > 0 && old->stack_canary != 0) {
-        uint64_t* canary_ptr = (uint64_t*)(old->kernel_stack_top - 4096);
+        uint64_t* canary_ptr = (uint64_t*)(old->kernel_stack_top - THREAD_KSTACK_BYTES);
         if (*canary_ptr != old->stack_canary) {
             kpanic("SCHEDULER: Stack Overflow detected! TID=%u", old->tid);
         }

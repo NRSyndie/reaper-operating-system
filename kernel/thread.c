@@ -13,12 +13,6 @@
 static uint32_t next_tid = 1;
 static slab_cache_t* thread_cache = NULL;
 
-/* Kernel stack: a 2-page (order-1) contiguous block. A user thread may run a
- * heavy syscall (e.g. Genesis GENESIS_OP_SPAWN, which loads an ELF and forks an
- * address space); its nested call depth exceeds a single 4KB frame. */
-#define THREAD_KSTACK_ORDER  1u
-#define THREAD_KSTACK_BYTES  (PAGE_SIZE << THREAD_KSTACK_ORDER)
-
 thread_t* thread_create(process_t* owner, void (*entry)(void)) {
     if (!thread_cache) {
         thread_cache = slab_create_cache("ThreadCache", sizeof(thread_t), 8);

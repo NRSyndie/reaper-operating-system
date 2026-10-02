@@ -173,7 +173,24 @@ tss_flush:
 .extern syscall_dispatcher
 syscall_entry:
     # 1. Switch to kernel stack
-    swapgs                  # GS base now points to kernel state
+    # NOTE: swapgs is broken on QEMU TCG (no-ops silently). Use explicit
+    # wrmsr to set MSR_GS_BASE = MSR_KERNEL_GS_BASE instead.
+    # Save registers clobbered by rdmsr/wrmsr (ECX, EAX, EDX)
+    pushq %rax              # Save syscall number
+    pushq %rcx              # Save user RIP
+    pushq %rdx              # Save arg2
+
+    # Read MSR_KERNEL_GS_BASE (holds &cpu_syscall_gs) and write to MSR_GS_BASE
+    movl $0xC0000102, %ecx  # MSR_KERNEL_GS_BASE
+    rdmsr                    # EDX:EAX = &cpu_syscall_gs
+    movl $0xC0000101, %ecx  # MSR_GS_BASE
+    wrmsr                    # MSR_GS_BASE = &cpu_syscall_gs
+
+    # Restore saved registers
+    popq %rdx               # Restore arg2
+    popq %rcx               # Restore user RIP
+    popq %rax               # Restore syscall number
+
     movq %rsp, %gs:0        # Save user stack
     movq %gs:8, %rsp        # Load kernel stack
 
@@ -223,13 +240,35 @@ syscall_entry:
     pxor %xmm14, %xmm14
     pxor %xmm15, %xmm15
 
-    # Restore RCX/R11 from GS
+    # Re-establish MSR_GS_BASE before first GS access.
+    # A context switch during syscall processing may have left MSR_GS_BASE=0
+    # (from another thread's sysret). Re-read MSR_KERNEL_GS_BASE to restore it.
+    movq %rax, %r10          # Save syscall return value in R10 (zeroed by residue)
+    movl $0xC0000102, %ecx   # MSR_KERNEL_GS_BASE
+    rdmsr                     # EDX:EAX = kernel GS base address
+    movl $0xC0000101, %ecx   # MSR_GS_BASE
+    wrmsr                     # MSR_GS_BASE = kernel GS base (restored)
+    movq %r10, %rax          # Restore syscall return value
+
+    # Restore RCX/R11 from GS (now safe — GS_BASE is valid)
     movq %gs:16, %rcx
     movq %gs:24, %r11
 
     # 5. Restore user stack and return
     movq %gs:0, %rsp        # Restore user stack
-    swapgs                  # GS base back to user
+
+    # Set MSR_GS_BASE = 0 for user mode (replacing broken swapgs).
+    # Save return value on user stack before clearing MSR_GS_BASE,
+    # since xorl %eax,%eax (needed for wrmsr) clobbers the return value.
+    pushq %rax              # Save syscall return value on user stack
+    movq %rcx, %r10         # Temporarily save user RIP in R10
+    xorl %eax, %eax
+    xorl %edx, %edx
+    movl $0xC0000101, %ecx  # MSR_GS_BASE
+    wrmsr                    # MSR_GS_BASE = 0 (user mode sees no kernel GS)
+    movq %r10, %rcx         # Restore user RIP for sysret
+    popq %rax               # Restore syscall return value
+
     sysretq
 
 /*

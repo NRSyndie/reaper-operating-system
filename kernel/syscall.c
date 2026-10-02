@@ -589,6 +589,14 @@ void syscall_init(void) {
     wrmsr(MSR_KERNEL_GS_BASE, (uint64_t)&cpu_syscall_gs);
     wrmsr(MSR_GS_BASE, 0);
 
+    /* Diagnostic: verify MSR_KERNEL_GS_BASE was written correctly */
+    uint64_t verify_gs = rdmsr(MSR_KERNEL_GS_BASE);
+    if (verify_gs != (uint64_t)&cpu_syscall_gs) {
+        kpanic("SYSCALL_INIT: MSR_KERNEL_GS_BASE verification FAILED! "
+               "Expected 0x%lx, got 0x%lx", (uint64_t)&cpu_syscall_gs, verify_gs);
+    }
+    kprintf("[SYSCALL] MSR_KERNEL_GS_BASE verified: 0x%lx\n", verify_gs);
+
     /* 3. Enable System Call Extensions (SCE) and No-Execute (NXE) in EFER */
     uint64_t efer = rdmsr(MSR_EFER);
     efer |= 1;       /* SCE Bit */

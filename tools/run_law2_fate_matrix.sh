@@ -144,6 +144,9 @@ required_markers=(
     "[ENTRY_VERIFY]"
     "[ENTRY_APPLY]"
     "[ENTRY_ATTEST]"
+    "[PKU] self-test: PASS"
+    "[MODULES] dual-module load: PASS"
+    "[BOOTINFO] v2 validation: PASS"
 )
 
 forbidden_markers=(
@@ -176,6 +179,7 @@ forbidden_markers=(
     "[DAY32-FAIL]"
     "[DAY33-FAIL]"
     "[DAY34-FAIL]"
+    "[PKU-FAIL]"
 )
 
 echo "[matrix] runs=${RUNS} timeout=${TIMEOUT_SECS}s iso=${ISO_PATH}"
@@ -187,7 +191,7 @@ for ((i = 1; i <= RUNS; i++)); do
 
     echo "[matrix] run ${i}/${RUNS}"
     timeout "${TIMEOUT_SECS}s" "${QEMU_BIN}" \
-        -cpu Skylake-Client,+pcid,+invpcid,-x2apic,-tsc-deadline,-hle,-rtm,-xsavec \
+        -cpu Skylake-Client,+pcid,+invpcid,+pku,-x2apic,-tsc-deadline,-hle,-rtm,-xsavec \
         -m 512 \
         -cdrom "${ISO_PATH}" \
         -no-shutdown \

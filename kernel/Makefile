@@ -65,7 +65,7 @@ $(LOG_DIR_TARGET):
 
 run: iso $(LOG_DIR_TARGET)
 	$(VECHO) "  LOG     (outputting to serial.log)"
-	$(Q)qemu-system-x86_64 -cpu Skylake-Client,+pcid,+invpcid,-x2apic,-tsc-deadline,-hle,-rtm,-xsavec -m 512 -cdrom $(ISO_FILE) -no-shutdown -serial file:serial.log
+	$(Q)qemu-system-x86_64 -cpu Skylake-Client,+pcid,+invpcid,+pku,-x2apic,-tsc-deadline,-hle,-rtm,-xsavec -m 512 -cdrom $(ISO_FILE) -no-shutdown -serial file:serial.log
 
 verify_matrix: iso
 	$(VECHO) "  VERIFY  Law2+Fate runtime matrix"

@@ -638,11 +638,12 @@ static void destroy_table_recursive(pt_entry_t* table, int level) {
     for (int i = 0; i < 512; i++) {
         if (table[i] & VMM_PRESENT) {
             uint64_t phys = table[i] & ~0xFFFULL;
+            uint64_t virt = (uint64_t)phys_to_virt(phys);
             // The kernel PML4 entries (256-511) are cloned,
             // so we must ensure we do not free kernel tables.
-            // Check if the physical address is within the kernel's mapped range
-            // This is a rough check, a more robust solution would track ownership.
-            if ((phys >= (uint64_t)kernel_start && phys < (uint64_t)kernel_end)) {
+            // Compare the virtual address (after HHDM mapping) against
+            // the kernel's virtual address range.
+            if (virt >= (uint64_t)kernel_start && virt < (uint64_t)kernel_end) {
                 continue; // Do not free kernel tables.
             }
 

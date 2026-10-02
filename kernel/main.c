@@ -1136,7 +1136,7 @@ static void test_day17_closure_contracts(void) {
         kpanic("DAY17-TEST: canary thread create failed");
     }
 
-    canary_ptr = (uint64_t*)(canary_thread->kernel_stack_top - 4096);
+    canary_ptr = (uint64_t*)(canary_thread->kernel_stack_top - THREAD_KSTACK_BYTES);
     if (*canary_ptr != canary_thread->stack_canary) {
         kprintf("[DAY17-FAIL] stack canary mismatch\n");
         kpanic("DAY17-TEST: stack canary validation failed");
@@ -1718,6 +1718,7 @@ void kernel_main(void) {
     dma_init();
     kprintf("[BOOT] Calling pkru_init...\n");
     pkru_init();
+    pku_self_test();
     kprintf("[BOOT] Calling cet_init...\n");
     cet_init();
     kprintf("[BOOT] Calling audit_init...\n");

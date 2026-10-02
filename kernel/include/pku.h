@@ -2,6 +2,7 @@
 #define PKU_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 /* Reality PKU Keys (Colours) */
 #define PKU_KEY_CASUAL    1
@@ -24,5 +25,7 @@ static inline void pkru_write(uint32_t pkru) {
 void pkru_init(void);
 void pkru_set_reality(uint8_t reality_mode);
 uint32_t pkru_for_reality(uint8_t reality_mode);
+bool pkru_assign_key(uint64_t pml4_phys, uint64_t virt_start, uint64_t length, uint8_t key);
+bool pku_self_test(void);
 
 #endif

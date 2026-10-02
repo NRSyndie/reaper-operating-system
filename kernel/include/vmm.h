@@ -23,6 +23,10 @@
 #define VMM_COW      (1ULL << 10)
 #define PTE_DOORBELL (1ULL << 11)
 
+/* x86_64 Protection Key bits in PTE (bits 59-62) */
+#define VMM_PK_SHIFT     59
+#define VMM_PK(key)      (((uint64_t)(key) & 0xF) << VMM_PK_SHIFT)
+
 #define VMM_NX       (1ULL << 63)
 
 // Standard Page Permissions

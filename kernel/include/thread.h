@@ -6,6 +6,10 @@
 #include "process.h"
 #include <entry.h>
 
+/* Kernel stack: a 2-page (order-1) contiguous block. */
+#define THREAD_KSTACK_ORDER  1u
+#define THREAD_KSTACK_BYTES  (PAGE_SIZE << THREAD_KSTACK_ORDER)
+
 typedef enum {
     THREAD_READY,    /* In ready queue */
     THREAD_RUNNING,  /* Currently executing */

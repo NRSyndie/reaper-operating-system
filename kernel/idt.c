@@ -271,6 +271,8 @@ void isr_handler(registers_t *regs) {
     kprintf("RFLAGS:     0x%lx\n", regs->rflags);
     kprintf("RSP:        0x%lx\n", regs->rsp);
     kprintf("SS:         0x%lx\n", regs->ss);
+    kprintf("MSR_GS_BASE:         0x%lx\n", rdmsr(MSR_GS_BASE));
+    kprintf("MSR_KERNEL_GS_BASE:  0x%lx\n", rdmsr(MSR_KERNEL_GS_BASE));
 
     kprintf("\n--- GENERAL REGISTERS ---\n");
     kprintf("RAX: 0x%lx  RBX: 0x%lx  RCX: 0x%lx\n", regs->rax, regs->rbx, regs->rcx);
